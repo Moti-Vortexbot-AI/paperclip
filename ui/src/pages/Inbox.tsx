@@ -393,42 +393,31 @@ export function FailedRunInboxRow({
   const showUnreadDot = unreadState === "visible" || unreadState === "fading";
 
   return (
-    <div className={cn(
-      "group border-b border-border px-2 py-2.5 last:border-b-0 sm:px-1 sm:pr-3 sm:py-2",
-      className,
-    )}>
-      <div className="flex items-start gap-2 sm:items-center">
-        {showUnreadSlot ? (
-          <span className="hidden sm:inline-flex h-4 w-4 shrink-0 items-center justify-center self-center">
-            {showUnreadDot ? (
-              <button
-                type="button"
-                onClick={onMarkRead}
-                className={cn(
-                  "inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors",
-                  "hover:bg-blue-500/20",
-                )}
-                aria-label="Mark as read"
-              >
-                <span className={cn(
-                  "block h-2 w-2 rounded-full transition-opacity duration-300",
-                  "bg-blue-600 dark:bg-blue-400",
-                  unreadState === "fading" ? "opacity-0" : "opacity-100",
-                )} />
-              </button>
-            ) : onArchive ? (
-              <button
-                type="button"
-                onClick={onArchive}
-                disabled={archiveDisabled}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
-                aria-label="Dismiss from inbox"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            ) : (
-              <span className="inline-flex h-4 w-4" aria-hidden="true" />
-            )}
+    <div className="group relative overflow-hidden rounded-xl border border-red-500/30 bg-gradient-to-br from-red-500/10 via-card to-card p-4">
+      <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-red-500/10 blur-2xl" />
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="absolute right-2 top-2 z-10 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
+        aria-label="Dismiss"
+      >
+        <X className="h-4 w-4" />
+      </button>
+      <div className="relative space-y-3">
+        {issue ? (
+          <Link
+            to={`/issues/${issue.identifier ?? issue.id}`}
+            state={issueLinkState}
+            className="block truncate text-sm font-medium transition-colors hover:text-foreground no-underline text-inherit"
+          >
+            <span className="font-mono text-muted-foreground mr-1.5">
+              {issue.identifier ?? issue.id.slice(0, 8)}
+            </span>
+            {issue.title}
+          </Link>
+        ) : (
+          <span className="block text-sm text-muted-foreground">
+            {run.errorCode ? `Error code: ${run.errorCode}` : "No linked task"}
           </span>
         ) : null}
         <Link
@@ -1715,9 +1704,12 @@ export function Inbox() {
                 <SelectValue placeholder="Approval status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All approval statuses</SelectItem>
-                <SelectItem value="actionable">Needs action</SelectItem>
-                <SelectItem value="resolved">Resolved</SelectItem>
+                <SelectItem value="everything">All categories</SelectItem>
+                <SelectItem value="issues_i_touched">My recent tasks</SelectItem>
+                <SelectItem value="join_requests">Join requests</SelectItem>
+                <SelectItem value="approvals">Approvals</SelectItem>
+                <SelectItem value="failed_runs">Failed runs</SelectItem>
+                <SelectItem value="alerts">Alerts</SelectItem>
               </SelectContent>
             </Select>
           )}

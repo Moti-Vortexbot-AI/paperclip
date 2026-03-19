@@ -5,6 +5,8 @@ import { Layout } from "./components/Layout";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { authApi } from "./api/auth";
 import { healthApi } from "./api/health";
+import { Artifacts } from "./pages/Artifacts";
+import { Chat } from "./pages/Chat";
 import { Dashboard } from "./pages/Dashboard";
 import { Companies } from "./pages/Companies";
 import { Agents } from "./pages/Agents";
@@ -121,6 +123,8 @@ function boardRoutes() {
     <>
       <Route index element={<Navigate to="dashboard" replace />} />
       <Route path="dashboard" element={<Dashboard />} />
+      <Route path="chat" element={<Chat />} />
+      <Route path="artifacts" element={<Artifacts />} />
       <Route path="onboarding" element={<OnboardingRoutePage />} />
       <Route path="companies" element={<Companies />} />
       <Route path="company/settings" element={<CompanySettings />} />
@@ -330,6 +334,8 @@ export function App() {
           <Route path="skills/*" element={<UnprefixedBoardRedirect />} />
           <Route path="settings" element={<LegacySettingsRedirect />} />
           <Route path="settings/*" element={<LegacySettingsRedirect />} />
+          <Route path="chat" element={<UnprefixedBoardRedirect />} />
+          <Route path="artifacts" element={<UnprefixedBoardRedirect />} />
           <Route path="agents" element={<UnprefixedBoardRedirect />} />
           <Route path="agents/new" element={<UnprefixedBoardRedirect />} />
           <Route path="agents/:agentId" element={<UnprefixedBoardRedirect />} />
