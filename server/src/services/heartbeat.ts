@@ -4585,7 +4585,7 @@ export function heartbeatService(db: Db) {
 
     cancelRun: (runId: string) => cancelRunInternal(runId),
 
-    cancelActiveForAgent: (agentId: string) => cancelActiveForAgentInternal(agentId),
+    cancelActiveForAgent: (agentId: string, reason?: string) => cancelActiveForAgentInternal(agentId, reason),
 
     cancelBudgetScopeWork,
 
