@@ -26,10 +26,8 @@ import {
 import {
   DEFAULT_INBOX_ISSUE_COLUMNS,
   getAvailableInboxIssueColumns,
-  loadInboxIssueColumns,
   normalizeInboxIssueColumns,
   resolveIssueWorkspaceName,
-  saveInboxIssueColumns,
   type InboxIssueColumn,
 } from "../lib/inbox";
 import { cn } from "../lib/utils";
@@ -77,6 +75,7 @@ const defaultViewState: IssueViewState = {
   collapsedGroups: [],
   collapsedParents: [],
 };
+
 function getViewState(key: string): IssueViewState {
   try {
     const raw = localStorage.getItem(key);
@@ -87,6 +86,43 @@ function getViewState(key: string): IssueViewState {
 
 function saveViewState(key: string, state: IssueViewState) {
   localStorage.setItem(key, JSON.stringify(state));
+}
+
+function getInitialViewState(key: string, initialAssignees?: string[]): IssueViewState {
+  const stored = getViewState(key);
+  if (!initialAssignees) return stored;
+  return {
+    ...stored,
+    assignees: initialAssignees,
+    statuses: [],
+  };
+}
+
+function getIssueColumnsStorageKey(key: string): string {
+  return `${key}:issue-columns`;
+}
+
+function loadIssueColumns(key: string): InboxIssueColumn[] {
+  try {
+    const raw = localStorage.getItem(getIssueColumnsStorageKey(key));
+    if (raw === null) return DEFAULT_INBOX_ISSUE_COLUMNS;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return DEFAULT_INBOX_ISSUE_COLUMNS;
+    return normalizeInboxIssueColumns(parsed);
+  } catch {
+    return DEFAULT_INBOX_ISSUE_COLUMNS;
+  }
+}
+
+function saveIssueColumns(key: string, columns: InboxIssueColumn[]) {
+  try {
+    localStorage.setItem(
+      getIssueColumnsStorageKey(key),
+      JSON.stringify(normalizeInboxIssueColumns(columns)),
+    );
+  } catch {
+    // Ignore localStorage failures.
+  }
 }
 
 function sortIssues(issues: Issue[], state: IssueViewState): Issue[] {
@@ -235,17 +271,13 @@ export function IssuesList({
 
   // Scope the storage key per company so folding/view state is independent across companies.
   const scopedKey = selectedCompanyId ? `${viewStateKey}:${selectedCompanyId}` : viewStateKey;
+  const initialAssigneesKey = initialAssignees?.join("|") ?? "";
 
-  const [viewState, setViewState] = useState<IssueViewState>(() => {
-    if (initialAssignees) {
-      return { ...defaultViewState, assignees: initialAssignees, statuses: [] };
-    }
-    return getViewState(scopedKey);
-  });
+  const [viewState, setViewState] = useState<IssueViewState>(() => getInitialViewState(scopedKey, initialAssignees));
   const [assigneePickerIssueId, setAssigneePickerIssueId] = useState<string | null>(null);
   const [assigneeSearch, setAssigneeSearch] = useState("");
   const [issueSearch, setIssueSearch] = useState(initialSearch ?? "");
-  const [visibleIssueColumns, setVisibleIssueColumns] = useState<InboxIssueColumn[]>(loadInboxIssueColumns);
+  const [visibleIssueColumns, setVisibleIssueColumns] = useState<InboxIssueColumn[]>(() => loadIssueColumns(scopedKey));
   const deferredIssueSearch = useDeferredValue(issueSearch);
   const normalizedIssueSearch = deferredIssueSearch.trim().toLowerCase();
 
@@ -253,16 +285,23 @@ export function IssuesList({
     setIssueSearch(initialSearch ?? "");
   }, [initialSearch]);
 
-  // Reload view state from localStorage when company changes (scopedKey changes).
-  const prevScopedKey = useRef(scopedKey);
+  // Reload view state whenever the persisted context changes.
+  const prevViewStateContextKey = useRef(`${scopedKey}::${initialAssigneesKey}`);
   useEffect(() => {
-    if (prevScopedKey.current !== scopedKey) {
-      prevScopedKey.current = scopedKey;
-      setViewState(initialAssignees
-        ? { ...defaultViewState, assignees: initialAssignees, statuses: [] }
-        : getViewState(scopedKey));
+    const nextContextKey = `${scopedKey}::${initialAssigneesKey}`;
+    if (prevViewStateContextKey.current !== nextContextKey) {
+      prevViewStateContextKey.current = nextContextKey;
+      setViewState(getInitialViewState(scopedKey, initialAssignees));
     }
-  }, [scopedKey, initialAssignees]);
+  }, [scopedKey, initialAssignees, initialAssigneesKey]);
+
+  const prevColumnsScopedKey = useRef(scopedKey);
+  useEffect(() => {
+    if (prevColumnsScopedKey.current !== scopedKey) {
+      prevColumnsScopedKey.current = scopedKey;
+      setVisibleIssueColumns(loadIssueColumns(scopedKey));
+    }
+  }, [scopedKey]);
 
   const updateView = useCallback((patch: Partial<IssueViewState>) => {
     setViewState((prev) => {
@@ -508,8 +547,8 @@ export function IssuesList({
   const setIssueColumns = useCallback((next: InboxIssueColumn[]) => {
     const normalized = normalizeInboxIssueColumns(next);
     setVisibleIssueColumns(normalized);
-    saveInboxIssueColumns(normalized);
-  }, []);
+    saveIssueColumns(scopedKey, normalized);
+  }, [scopedKey]);
 
   const toggleIssueColumn = useCallback((column: InboxIssueColumn, enabled: boolean) => {
     if (enabled) {

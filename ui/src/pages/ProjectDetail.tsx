@@ -209,7 +209,7 @@ function ProjectIssuesList({ projectId, companyId }: { projectId: string; compan
       projects={projects}
       liveIssueIds={liveIssueIds}
       projectId={projectId}
-      viewStateKey={`paperclip:project-view:${projectId}`}
+      viewStateKey="paperclip:project-issues-view"
       onUpdateIssue={(id, data) => updateIssue.mutate({ id, data })}
     />
   );

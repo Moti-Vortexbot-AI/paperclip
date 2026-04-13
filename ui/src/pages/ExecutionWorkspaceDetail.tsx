@@ -301,7 +301,7 @@ function ExecutionWorkspaceIssuesList({
       projects={projectOptions}
       liveIssueIds={liveIssueIds}
       projectId={project?.id}
-      viewStateKey={`paperclip:execution-workspace-view:${workspaceId}`}
+      viewStateKey="paperclip:execution-workspace-issues-view"
       onUpdateIssue={(id, data) => updateIssue.mutate({ id, data })}
     />
   );
