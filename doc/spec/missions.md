@@ -98,6 +98,29 @@ stable marker entries in the mission issue's `decision-log` document with a rati
 summary projections combine validation reports, generated fix issues, and decision-log waivers to compute finding counts,
 severity counts, assertion mappings, evidence, and fix status.
 
+## Operator Workflow
+
+The board or orchestrator starts from a normal issue that already has a goal, project, assignee, and workspace context.
+
+1. Initialize the mission from the issue. This creates the required document bundle, sets `originKind: mission`, and assigns a `mission:<identifier>` billing code when one is not already present.
+2. Fill the required documents, especially `validation-contract` and `features`. The validation contract defines the pass/fail assertions; the features document groups milestone work and claims those assertions.
+3. Decompose the mission. Paperclip creates milestone, feature, validation, and fix-loop child issues with normal parentage, inherited workspace settings, billing code, and explicit blocker relationships.
+4. Advance the mission. Advance wakes assigned, unblocked feature or validation issues and stops when approval, budget, max validation rounds, or unresolved blockers prevent safe scheduling.
+5. Validators add `validation-report-round-N` documents. Blocking findings become bounded fix issues during advance. Non-blocking or suggestion findings can be waived only with a rationale recorded in `decision-log`.
+6. Workers fix generated fix issues and leave evidence in comments, attachments, or work products. When the fix issue is done, mission summary treats the associated finding as resolved.
+7. Complete the mission by marking the mission issue done and adding `mission-final-report`. The board then uses the mission summary panel to inspect status, blockers, validation results, cost/runtime, and remaining follow-up.
+
+The mission summary endpoint and issue detail panel are the review surface. Operators should not reconstruct state from raw transcripts unless they need deeper evidence.
+
+## Developer Extension Points
+
+- Shared contract: add document keys, mission states, document parsers, and Zod validators in `packages/shared/src/mission.ts`, `packages/shared/src/mission-documents.ts`, and `packages/shared/src/validators/mission.ts`.
+- Server lifecycle: keep mission mutations in `server/src/services/mission-initialization.ts`, `server/src/services/missions.ts`, and `server/src/services/mission-summary.ts`; expose company-scoped routes from `server/src/routes/missions.ts` or the existing issue mission routes.
+- UI review surface: extend `ui/src/components/MissionSummaryPanel.tsx` and the issue detail tab wiring in `ui/src/pages/IssueDetail.tsx`; keep raw logs one layer down from the board-facing mission summary.
+- Evidence model: prefer issue comments, attachments, and work products for validation evidence. Do not add transcript-only evidence requirements.
+- Scheduling policy: use first-class blocker relations, checkout ownership, approval state, budget incidents, and assignment wakeups. Mission code must not directly mark unrelated worker tasks complete or bypass normal issue execution semantics.
+- Test shape: use focused shared parser tests for document contracts, service integration tests for DB-backed lifecycle behavior, route tests for auth/company boundaries, and component tests for primary board states.
+
 ## State Derivation
 
 MVP mission state is derived from issue and document state rather than a new table.

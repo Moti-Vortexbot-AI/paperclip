@@ -93,7 +93,7 @@ describeEmbeddedPostgres("missionInitializationService", () => {
     const service = missionInitializationService(db);
 
     const first = await service.initialize(issueId, {
-      actor: { agentId, runId: "run-1" },
+      actor: { agentId },
     });
 
     expect(first.createdDocumentKeys).toEqual([...MISSION_REQUIRED_DOCUMENT_KEYS]);
@@ -109,7 +109,7 @@ describeEmbeddedPostgres("missionInitializationService", () => {
     expect(docsAfterFirst.every((document) => document.latestRevisionNumber === 1)).toBe(true);
 
     const second = await service.initialize(issueId, {
-      actor: { agentId, runId: "run-2" },
+      actor: { agentId },
     });
 
     expect(second.createdDocumentKeys).toEqual([]);
@@ -137,11 +137,10 @@ describeEmbeddedPostgres("missionInitializationService", () => {
       changeSummary: "User-authored contract",
       baseRevisionId: null,
       createdByAgentId: agentId,
-      createdByRunId: "run-existing",
     });
 
     const result = await missionInitializationService(db).initialize(issueId, {
-      actor: { agentId, runId: "run-1" },
+      actor: { agentId },
     });
 
     expect(result.createdDocumentKeys).not.toContain("validation-contract");
