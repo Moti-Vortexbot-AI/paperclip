@@ -363,6 +363,19 @@ Operational policy:
   - `document_id` uuid fk not null
   - `key` text not null (`plan`, `design`, `notes`, etc.)
 
+## 7.16 Issue-Backed Missions
+
+Missions are a V1 orchestration layer over issues, documents, blockers, heartbeats, budgets, and governance. They do not introduce a parallel execution model. The canonical product contract, document keys, structured validation assertion shape, feature shape, finding shape, and MVP state derivation rules live in `doc/spec/missions.md`.
+
+V1 invariants:
+
+- A mission is anchored by a normal company-scoped issue.
+- Required mission state is stored as issue documents with stable keys.
+- Milestones, features, validation runs, and fixes are normal child issues.
+- Dependencies are explicit blocker relationships.
+- Heartbeat runs, issue checkout, activity logging, approval gates, work products, attachments, and budget hard-stops remain the enforcement layer.
+- Shared constants and validators in `packages/shared` define the machine-readable mission contract used by server and UI code.
+
 ## 8. State Machines
 
 ## 8.1 Agent Status

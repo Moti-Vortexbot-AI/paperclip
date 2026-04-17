@@ -181,6 +181,20 @@ export type {
 } from "./access.js";
 export type { QuotaWindow, ProviderQuotaResult } from "./quota.js";
 export type {
+  MissionEvidenceRequirement,
+  MissionValidationAssertion,
+  MissionValidationContract,
+  MissionFeature,
+  MissionMilestone,
+  MissionFeaturesDocument,
+  MissionFinding,
+  MissionValidationReport,
+  IssueBackedMissionSummary,
+  MissionGeneratedIssueKind,
+  MissionDecomposedIssue,
+  MissionDecompositionResult,
+} from "./mission.js";
+export type {
   CompanyPortabilityInclude,
   CompanyPortabilityEnvInput,
   CompanyPortabilityFileEntry,
