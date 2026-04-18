@@ -9,7 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Router } from "express";
 import type { Request } from "express";
-import { and, desc, eq, gt, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   assets,
@@ -34,6 +34,7 @@ import {
   searchAdminUsersQuerySchema,
   updateCompanyMemberWithPermissionsSchema,
   updateCompanyMemberSchema,
+  archiveCompanyMemberSchema,
   updateMemberPermissionsSchema,
   updateUserCompanyAccessSchema,
   PERMISSION_KEYS
@@ -994,7 +995,11 @@ async function loadCompanyAccessSummary(
   };
 }
 
-async function loadCompanyMemberRecords(db: Db, companyId: string) {
+async function loadCompanyMemberRecords(
+  db: Db,
+  companyId: string,
+  options: { includeArchived?: boolean } = {},
+) {
   const members = await db
     .select()
     .from(companyMemberships)
@@ -1002,6 +1007,7 @@ async function loadCompanyMemberRecords(db: Db, companyId: string) {
       and(
         eq(companyMemberships.companyId, companyId),
         eq(companyMemberships.principalType, "user"),
+        options.includeArchived ? undefined : ne(companyMemberships.status, "archived"),
       ),
     )
     .orderBy(desc(companyMemberships.updatedAt));
@@ -3831,6 +3837,44 @@ export function accessRoutes(
       );
       if (!member) throw notFound("Member not found");
       res.json(member);
+    }
+  );
+
+  router.post(
+    "/companies/:companyId/members/:memberId/archive",
+    validate(archiveCompanyMemberSchema),
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      const memberId = req.params.memberId as string;
+      await assertCompanyPermission(req, companyId, "users:manage_permissions");
+
+      const result = await access.archiveMember(companyId, memberId, {
+        reassignment: req.body.reassignment ?? null,
+      });
+      if (!result) throw notFound("Member not found");
+
+      await logActivity(db, {
+        companyId,
+        actorType: "user",
+        actorId: req.actor.userId ?? "board",
+        action: "company_member.archived",
+        entityType: "company_membership",
+        entityId: memberId,
+        details: {
+          principalId: result.member.principalId,
+          reassignedIssueCount: result.reassignedIssueCount,
+          reassignment: req.body.reassignment ?? null,
+        },
+      });
+
+      const member = (await loadCompanyMemberRecords(db, companyId, { includeArchived: true })).find(
+        (entry) => entry.id === memberId,
+      );
+      if (!member) throw notFound("Member not found");
+      res.json({
+        member,
+        reassignedIssueCount: result.reassignedIssueCount,
+      });
     }
   );
 

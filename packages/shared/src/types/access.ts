@@ -59,6 +59,11 @@ export interface CompanyMembersResponse {
   };
 }
 
+export interface ArchiveCompanyMemberResponse {
+  member: CompanyMemberRecord;
+  reassignedIssueCount: number;
+}
+
 export interface Invite {
   id: string;
   companyId: string | null;
