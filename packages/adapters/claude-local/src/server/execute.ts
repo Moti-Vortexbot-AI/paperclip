@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,6 +56,16 @@ import { isBedrockModelId } from "./models.js";
 import { prepareClaudePromptBundle } from "./prompt-cache.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
+
+async function ensureGitRepo(dir: string): Promise<void> {
+  try {
+    await fs.access(path.join(dir, ".git"));
+  } catch {
+    await new Promise<void>((resolve, reject) => {
+      execFile("git", ["init"], { cwd: dir }, (err) => (err ? reject(err) : resolve()));
+    });
+  }
+}
 
 interface ClaudeExecutionInput {
   runId: string;
@@ -146,6 +157,9 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
   const effectiveWorkspaceCwd = useConfiguredInsteadOfAgentHome ? "" : workspaceCwd;
   const cwd = effectiveWorkspaceCwd || configuredCwd || process.cwd();
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
+  if (workspaceSource === "agent_home" || (!effectiveWorkspaceCwd && !configuredCwd)) {
+    await ensureGitRepo(cwd);
+  }
 
   const envConfig = parseObject(config.env);
   const hasExplicitApiKey =

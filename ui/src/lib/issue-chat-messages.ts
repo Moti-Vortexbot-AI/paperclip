@@ -747,7 +747,11 @@ function createLiveRunMessage(args: {
         ? ""
         : "Working...";
 
-  const content = parts;
+  const content: typeof parts = parts.length > 0
+    ? parts
+    : waitingText
+      ? [{ type: "text", text: waitingText }]
+      : [];
 
   const message: ThreadAssistantMessage = {
     id: `run-assistant:${run.id}`,
@@ -859,7 +863,9 @@ export function buildIssueChatMessages(args: {
     });
   }
 
+  const linkedRunIds = new Set(linkedRuns.map((r) => r.runId));
   for (const run of normalizeLiveRuns(liveRuns, activeRun, issueId)) {
+    if (linkedRunIds.has(run.id)) continue;
     orderedMessages.push({
       createdAtMs: toTimestamp(run.startedAt ?? run.createdAt),
       order: 3,
