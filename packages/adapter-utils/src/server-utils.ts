@@ -212,6 +212,7 @@ export function appendWithByteCap(prev: string, chunk: string, cap = MAX_CAPTURE
   while (start < buffer.length && (buffer[start]! & 0xc0) === 0x80) start += 1;
   return buffer.subarray(start).toString("utf8");
 }
+
 function resumeReadable(readable: { resume: () => unknown; destroyed?: boolean } | null | undefined) {
   if (!readable || readable.destroyed) return;
   readable.resume();
