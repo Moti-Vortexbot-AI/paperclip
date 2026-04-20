@@ -20,7 +20,13 @@ const mockIssuesApi = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/router", () => ({
-  Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
+  Link: ({
+    children,
+    to,
+    ...props
+  }: { children: ReactNode; to: string } & React.ComponentProps<"a">) => (
+    <a href={to} {...props}>{children}</a>
+  ),
 }));
 
 vi.mock("../api/issues", () => ({
