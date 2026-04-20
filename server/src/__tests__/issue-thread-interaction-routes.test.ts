@@ -161,6 +161,7 @@ describe("issue thread interaction routes", () => {
         result: {
           version: 1,
           createdTasks: [{ clientKey: "task-1", issueId: "child-1" }],
+          skippedClientKeys: ["task-2"],
         },
         createdAt: "2026-04-20T12:00:00.000Z",
         updatedAt: "2026-04-20T12:05:00.000Z",
@@ -266,10 +267,15 @@ describe("issue thread interaction routes", () => {
 
     const res = await request(app)
       .post("/api/issues/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/interactions/interaction-1/accept")
-      .send({});
+      .send({ selectedClientKeys: ["task-1"] });
 
     expect(res.status).toBe(200);
-    expect(mockInteractionService.acceptSuggestedTasks).toHaveBeenCalled();
+    expect(mockInteractionService.acceptSuggestedTasks).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }),
+      "interaction-1",
+      { selectedClientKeys: ["task-1"] },
+      expect.objectContaining({ userId: "local-board" }),
+    );
     expect(mockHeartbeatService.wakeup).toHaveBeenCalledTimes(2);
     expect(mockHeartbeatService.wakeup).toHaveBeenNthCalledWith(
       1,

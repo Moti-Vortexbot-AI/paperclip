@@ -2569,7 +2569,7 @@ export function issueRoutes(
       assertBoard(req);
 
       const actor = getActorInfo(req);
-      const { interaction, createdIssues } = await issueThreadInteractionService(db).acceptSuggestedTasks(issue, interactionId, {
+      const { interaction, createdIssues } = await issueThreadInteractionService(db).acceptSuggestedTasks(issue, interactionId, req.body, {
         agentId: actor.agentId,
         userId: actor.actorType === "user" ? actor.actorId : null,
       });
@@ -2590,6 +2590,10 @@ export function issueRoutes(
           createdTaskCount:
             interaction.kind === "suggest_tasks"
               ? (interaction.result?.createdTasks?.length ?? 0)
+              : 0,
+          skippedTaskCount:
+            interaction.kind === "suggest_tasks"
+              ? (interaction.result?.skippedClientKeys?.length ?? 0)
               : 0,
         },
       });

@@ -106,8 +106,12 @@ export const issuesApi = {
     api.get<IssueThreadInteraction[]>(`/issues/${id}/interactions`),
   createInteraction: (id: string, data: Record<string, unknown>) =>
     api.post<IssueThreadInteraction>(`/issues/${id}/interactions`, data),
-  acceptInteraction: (id: string, interactionId: string) =>
-    api.post<SuggestTasksInteraction>(`/issues/${id}/interactions/${interactionId}/accept`, {}),
+  acceptInteraction: (
+    id: string,
+    interactionId: string,
+    data?: { selectedClientKeys?: string[] },
+  ) =>
+    api.post<SuggestTasksInteraction>(`/issues/${id}/interactions/${interactionId}/accept`, data ?? {}),
   rejectInteraction: (id: string, interactionId: string, reason?: string) =>
     api.post<SuggestTasksInteraction>(`/issues/${id}/interactions/${interactionId}/reject`, reason ? { reason } : {}),
   respondToInteraction: (

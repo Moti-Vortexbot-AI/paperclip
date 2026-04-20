@@ -89,7 +89,18 @@ function InteractiveSuggestedTasksCard() {
       agentMap={storybookAgentMap}
       currentUserId={issueThreadInteractionFixtureMeta.currentUserId}
       userLabelMap={boardUserLabels}
-      onAcceptInteraction={() => setInteraction(acceptedSuggestedTasksInteraction)}
+      onAcceptInteraction={(_interaction, selectedClientKeys) =>
+        setInteraction({
+          ...acceptedSuggestedTasksInteraction,
+          result: {
+            version: 1,
+            createdTasks: (acceptedSuggestedTasksInteraction.result?.createdTasks ?? []).filter((task) =>
+              selectedClientKeys?.includes(task.clientKey) ?? true),
+            skippedClientKeys: pendingSuggestedTasksInteraction.payload.tasks
+              .map((task) => task.clientKey)
+              .filter((clientKey) => !(selectedClientKeys?.includes(clientKey) ?? true)),
+          },
+        })}
       onRejectInteraction={(_interaction, reason) =>
         setInteraction({
           ...rejectedSuggestedTasksInteraction,

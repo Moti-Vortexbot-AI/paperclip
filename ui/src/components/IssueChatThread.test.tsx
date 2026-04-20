@@ -412,6 +412,71 @@ describe("IssueChatThread", () => {
         id: "interaction-suggest-1",
         kind: "suggest_tasks",
       }),
+      ["task-1"],
+    );
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("submits only the selected draft subtree when tasks are manually pruned", async () => {
+    const root = createRoot(container);
+    const onAcceptInteraction = vi.fn(async () => undefined);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <IssueChatThread
+            comments={[]}
+            interactions={[createSuggestedTasksInteraction({
+              payload: {
+                version: 1,
+                tasks: [
+                  {
+                    clientKey: "root",
+                    title: "Root task",
+                  },
+                  {
+                    clientKey: "child",
+                    parentClientKey: "root",
+                    title: "Child task",
+                  },
+                ],
+              },
+            })]}
+            linkedRuns={[]}
+            timelineEvents={[]}
+            liveRuns={[]}
+            onAdd={async () => {}}
+            onAcceptInteraction={onAcceptInteraction}
+            showComposer={false}
+            enableLiveTranscriptPolling={false}
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    const childCheckbox = container.querySelector('[aria-label="Include Child task"]');
+    expect(childCheckbox).toBeTruthy();
+
+    await act(async () => {
+      childCheckbox?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const acceptButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Accept selected drafts"),
+    );
+    expect(acceptButton).toBeTruthy();
+    await act(async () => {
+      acceptButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onAcceptInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "interaction-suggest-1",
+        kind: "suggest_tasks",
+      }),
+      ["root"],
     );
 
     act(() => {

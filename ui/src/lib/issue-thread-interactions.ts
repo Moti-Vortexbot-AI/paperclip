@@ -47,10 +47,24 @@ export function buildIssueThreadInteractionSummary(
 ) {
   if (interaction.kind === "suggest_tasks") {
     const count = interaction.payload.tasks.length;
+    if (interaction.status === "accepted") {
+      const createdCount = interaction.result?.createdTasks?.length ?? 0;
+      const skippedCount = interaction.result?.skippedClientKeys?.length ?? 0;
+      if (skippedCount > 0) {
+        return `Accepted ${createdCount} of ${count} tasks`;
+      }
+      return createdCount === 1 ? "Accepted 1 task" : `Accepted ${createdCount} tasks`;
+    }
+    if (interaction.status === "rejected") {
+      return count === 1 ? "Rejected 1 task" : `Rejected ${count} tasks`;
+    }
     return count === 1 ? "Suggested 1 task" : `Suggested ${count} tasks`;
   }
 
   const count = interaction.payload.questions.length;
+  if (interaction.status === "answered") {
+    return count === 1 ? "Answered 1 question" : `Answered ${count} questions`;
+  }
   return count === 1 ? "Asked 1 question" : `Asked ${count} questions`;
 }
 
@@ -79,6 +93,13 @@ export function buildSuggestedTaskTree(
 
 export function countSuggestedTaskNodes(node: SuggestedTaskTreeNode): number {
   return 1 + node.children.reduce((sum, child) => sum + countSuggestedTaskNodes(child), 0);
+}
+
+export function collectSuggestedTaskClientKeys(node: SuggestedTaskTreeNode): string[] {
+  return [
+    node.task.clientKey,
+    ...node.children.flatMap((child) => collectSuggestedTaskClientKeys(child)),
+  ];
 }
 
 export function getQuestionAnswerLabels(args: {

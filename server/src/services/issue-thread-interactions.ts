@@ -7,6 +7,7 @@ import {
   issues,
 } from "@paperclipai/db";
 import type {
+  AcceptIssueThreadInteraction,
   AskUserQuestionsAnswer,
   AskUserQuestionsInteraction,
   CreateIssueThreadInteraction,
@@ -17,6 +18,7 @@ import type {
   SuggestTasksResultCreatedTask,
 } from "@paperclipai/shared";
 import {
+  acceptIssueThreadInteractionSchema,
   askUserQuestionsPayloadSchema,
   askUserQuestionsResultSchema,
   createIssueThreadInteractionSchema,
@@ -135,6 +137,46 @@ function buildTaskCreationOrder(tasks: ReadonlyArray<SuggestTasksInteraction["pa
   }
 
   return ordered;
+}
+
+function resolveSelectedSuggestedTasks(args: {
+  interaction: SuggestTasksInteraction;
+  selectedClientKeys?: AcceptIssueThreadInteraction["selectedClientKeys"];
+}) {
+  const taskByClientKey = new Map(
+    args.interaction.payload.tasks.map((task) => [task.clientKey, task] as const),
+  );
+  const selectedClientKeys = args.selectedClientKeys ?? args.interaction.payload.tasks.map((task) => task.clientKey);
+  const selectedClientKeySet = new Set<string>();
+
+  for (const clientKey of selectedClientKeys) {
+    const task = taskByClientKey.get(clientKey);
+    if (!task) {
+      throw unprocessable(`Unknown suggested task clientKey: ${clientKey}`);
+    }
+    selectedClientKeySet.add(clientKey);
+  }
+
+  if (selectedClientKeySet.size === 0) {
+    throw unprocessable("Select at least one suggested task to accept");
+  }
+
+  for (const clientKey of selectedClientKeySet) {
+    let parentClientKey = taskByClientKey.get(clientKey)?.parentClientKey ?? null;
+    while (parentClientKey) {
+      if (!selectedClientKeySet.has(parentClientKey)) {
+        throw unprocessable(`Suggested task ${clientKey} requires its parent ${parentClientKey} to also be selected`);
+      }
+      parentClientKey = taskByClientKey.get(parentClientKey)?.parentClientKey ?? null;
+    }
+  }
+
+  return {
+    selectedTasks: args.interaction.payload.tasks.filter((task) => selectedClientKeySet.has(task.clientKey)),
+    skippedClientKeys: args.interaction.payload.tasks
+      .filter((task) => !selectedClientKeySet.has(task.clientKey))
+      .map((task) => task.clientKey),
+  };
 }
 
 function normalizeQuestionAnswers(args: {
@@ -316,8 +358,10 @@ export function issueThreadInteractionService(db: Db) {
     acceptSuggestedTasks: async (
       issue: { id: string; companyId: string; projectId: string | null; goalId: string | null },
       interactionId: string,
+      input: AcceptIssueThreadInteraction,
       actor: InteractionActor,
     ) => {
+      const data = acceptIssueThreadInteractionSchema.parse(input);
       const current = await db
         .select()
         .from(issueThreadInteractions)
@@ -336,11 +380,15 @@ export function issueThreadInteractionService(db: Db) {
       }
 
       const interaction = hydrateInteraction(current) as SuggestTasksInteraction;
-      const orderedTasks = buildTaskCreationOrder(interaction.payload.tasks);
+      const { selectedTasks, skippedClientKeys } = resolveSelectedSuggestedTasks({
+        interaction,
+        selectedClientKeys: data.selectedClientKeys,
+      });
+      const orderedTasks = buildTaskCreationOrder(selectedTasks);
       const explicitParentIds = [...new Set([
         issue.id,
         ...(interaction.payload.defaultParentId ? [interaction.payload.defaultParentId] : []),
-        ...interaction.payload.tasks
+        ...selectedTasks
           .map((task) => task.parentId ?? null)
           .filter((value): value is string => Boolean(value)),
       ])];
@@ -413,6 +461,7 @@ export function issueThreadInteractionService(db: Db) {
             result: {
               version: 1,
               createdTasks: [...createdByClientKey.values()],
+              ...(skippedClientKeys.length > 0 ? { skippedClientKeys } : {}),
             },
             resolvedByAgentId: actor.agentId ?? null,
             resolvedByUserId: actor.userId ?? null,

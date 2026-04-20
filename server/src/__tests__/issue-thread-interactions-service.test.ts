@@ -124,7 +124,7 @@ describeEmbeddedPostgres("issueThreadInteractionService", () => {
       companyId,
       goalId,
       projectId: null,
-    }, created.id, {
+    }, created.id, {}, {
       userId: "local-board",
     });
 
@@ -160,6 +160,155 @@ describeEmbeddedPostgres("issueThreadInteractionService", () => {
     const listed = await interactionsSvc.listForIssue(issueId);
     expect(listed).toHaveLength(1);
     expect(listed[0]?.status).toBe("accepted");
+  });
+
+  it("accepts a selected subset of suggested tasks and records the skipped drafts", async () => {
+    const companyId = randomUUID();
+    const goalId = randomUUID();
+    const issueId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+    await instanceSettingsService(db).updateExperimental({ enableIsolatedWorkspaces: false });
+
+    await db.insert(goals).values({
+      id: goalId,
+      companyId,
+      title: "Selectively persist thread interactions",
+      level: "task",
+      status: "active",
+    });
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      goalId,
+      title: "Parent issue",
+      status: "in_progress",
+      priority: "medium",
+      requestDepth: 2,
+    });
+
+    const created = await interactionsSvc.create({
+      id: issueId,
+      companyId,
+    }, {
+      kind: "suggest_tasks",
+      continuationPolicy: "wake_assignee",
+      payload: {
+        version: 1,
+        tasks: [
+          {
+            clientKey: "root",
+            title: "Create the root follow-up",
+          },
+          {
+            clientKey: "child",
+            parentClientKey: "root",
+            title: "Create the nested follow-up",
+          },
+          {
+            clientKey: "sibling",
+            title: "Create the sibling follow-up",
+          },
+        ],
+      },
+    }, {
+      userId: "local-board",
+    });
+
+    const accepted = await interactionsSvc.acceptSuggestedTasks({
+      id: issueId,
+      companyId,
+      goalId,
+      projectId: null,
+    }, created.id, {
+      selectedClientKeys: ["root"],
+    }, {
+      userId: "local-board",
+    });
+
+    expect(accepted.interaction.result).toMatchObject({
+      version: 1,
+      createdTasks: [
+        expect.objectContaining({ clientKey: "root", parentIssueId: issueId }),
+      ],
+      skippedClientKeys: ["child", "sibling"],
+    });
+
+    const children = await issuesSvc.list(companyId, { parentId: issueId });
+    expect(children).toHaveLength(1);
+    expect(children[0]?.title).toBe("Create the root follow-up");
+  });
+
+  it("rejects partial acceptance when a selected task omits its selected-tree parent", async () => {
+    const companyId = randomUUID();
+    const goalId = randomUUID();
+    const issueId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+    await instanceSettingsService(db).updateExperimental({ enableIsolatedWorkspaces: false });
+
+    await db.insert(goals).values({
+      id: goalId,
+      companyId,
+      title: "Validate selective acceptance",
+      level: "task",
+      status: "active",
+    });
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      goalId,
+      title: "Parent issue",
+      status: "in_progress",
+      priority: "medium",
+    });
+
+    const created = await interactionsSvc.create({
+      id: issueId,
+      companyId,
+    }, {
+      kind: "suggest_tasks",
+      continuationPolicy: "wake_assignee",
+      payload: {
+        version: 1,
+        tasks: [
+          {
+            clientKey: "root",
+            title: "Create the root follow-up",
+          },
+          {
+            clientKey: "child",
+            parentClientKey: "root",
+            title: "Create the nested follow-up",
+          },
+        ],
+      },
+    }, {
+      userId: "local-board",
+    });
+
+    await expect(
+      interactionsSvc.acceptSuggestedTasks({
+        id: issueId,
+        companyId,
+        goalId,
+        projectId: null,
+      }, created.id, {
+        selectedClientKeys: ["child"],
+      }, {
+        userId: "local-board",
+      }),
+    ).rejects.toThrow("requires its parent");
   });
 
   it("persists validated answers for ask_user_questions interactions", async () => {

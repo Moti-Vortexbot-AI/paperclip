@@ -307,6 +307,7 @@ export interface SuggestTasksResultCreatedTask {
 export interface SuggestTasksResult {
   version: 1;
   createdTasks?: SuggestTasksResultCreatedTask[];
+  skippedClientKeys?: string[];
   rejectionReason?: string | null;
 }
 

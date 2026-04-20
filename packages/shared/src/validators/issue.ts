@@ -247,6 +247,7 @@ export const suggestTasksResultCreatedTaskSchema = z.object({
 export const suggestTasksResultSchema = z.object({
   version: z.literal(1),
   createdTasks: z.array(suggestTasksResultCreatedTaskSchema).max(50).optional(),
+  skippedClientKeys: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
   rejectionReason: z.string().trim().max(4000).nullable().optional(),
 });
 
@@ -332,7 +333,22 @@ export const createIssueThreadInteractionSchema = z.discriminatedUnion("kind", [
 
 export type CreateIssueThreadInteraction = z.infer<typeof createIssueThreadInteractionSchema>;
 
-export const acceptIssueThreadInteractionSchema = z.object({});
+export const acceptIssueThreadInteractionSchema = z.object({
+  selectedClientKeys: z.array(z.string().trim().min(1).max(120)).min(1).max(50).optional(),
+}).superRefine((value, ctx) => {
+  const seenClientKeys = new Set<string>();
+  for (const [index, clientKey] of (value.selectedClientKeys ?? []).entries()) {
+    if (seenClientKeys.has(clientKey)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "selectedClientKeys must be unique",
+        path: ["selectedClientKeys", index],
+      });
+      continue;
+    }
+    seenClientKeys.add(clientKey);
+  }
+});
 export type AcceptIssueThreadInteraction = z.infer<typeof acceptIssueThreadInteractionSchema>;
 
 export const rejectIssueThreadInteractionSchema = z.object({

@@ -122,7 +122,10 @@ interface IssueChatMessageContext {
   onCancelQueued?: (commentId: string) => void;
   interruptingQueuedRunId?: string | null;
   onImageClick?: (src: string) => void;
-  onAcceptInteraction?: (interaction: SuggestTasksInteraction) => Promise<void> | void;
+  onAcceptInteraction?: (
+    interaction: SuggestTasksInteraction,
+    selectedClientKeys?: string[],
+  ) => Promise<void> | void;
   onRejectInteraction?: (
     interaction: SuggestTasksInteraction,
     reason?: string,
@@ -274,7 +277,10 @@ interface IssueChatThreadProps {
   interruptingQueuedRunId?: string | null;
   stoppingRunId?: string | null;
   onImageClick?: (src: string) => void;
-  onAcceptInteraction?: (interaction: SuggestTasksInteraction) => Promise<void> | void;
+  onAcceptInteraction?: (
+    interaction: SuggestTasksInteraction,
+    selectedClientKeys?: string[],
+  ) => Promise<void> | void;
   onRejectInteraction?: (
     interaction: SuggestTasksInteraction,
     reason?: string,

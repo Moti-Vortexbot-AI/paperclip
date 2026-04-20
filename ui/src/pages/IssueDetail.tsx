@@ -542,7 +542,10 @@ type IssueDetailChatTabProps = {
   onCancelQueued: (commentId: string) => void;
   interruptingQueuedRunId: string | null;
   onImageClick: (src: string) => void;
-  onAcceptInteraction: (interaction: SuggestTasksInteraction) => Promise<void>;
+  onAcceptInteraction: (
+    interaction: SuggestTasksInteraction,
+    selectedClientKeys?: string[],
+  ) => Promise<void>;
   onRejectInteraction: (interaction: SuggestTasksInteraction, reason?: string) => Promise<void>;
   onSubmitInteractionAnswers: (
     interaction: IssueThreadInteraction,
@@ -1540,8 +1543,13 @@ export function IssueDetail() {
     },
   });
   const acceptInteraction = useMutation({
-    mutationFn: (interaction: SuggestTasksInteraction) =>
-      issuesApi.acceptInteraction(issueId!, interaction.id),
+    mutationFn: ({
+      interaction,
+      selectedClientKeys,
+    }: {
+      interaction: SuggestTasksInteraction;
+      selectedClientKeys?: string[];
+    }) => issuesApi.acceptInteraction(issueId!, interaction.id, { selectedClientKeys }),
     onSuccess: (interaction) => {
       upsertInteractionInCache(interaction);
       if (resolvedCompanyId && issue?.id) {
@@ -1549,8 +1557,12 @@ export function IssueDetail() {
       }
       invalidateIssueDetail();
       invalidateIssueCollections();
+      const createdCount = interaction.result?.createdTasks?.length ?? 0;
+      const skippedCount = interaction.result?.skippedClientKeys?.length ?? 0;
       pushToast({
-        title: "Suggested tasks accepted",
+        title: skippedCount > 0
+          ? `Accepted ${createdCount} draft${createdCount === 1 ? "" : "s"} and skipped ${skippedCount}`
+          : "Suggested tasks accepted",
         tone: "success",
       });
     },
@@ -2336,8 +2348,11 @@ export function IssueDetail() {
   const handleInterruptQueuedRun = useCallback(async (runId: string) => {
     await interruptQueuedComment.mutateAsync(runId);
   }, [interruptQueuedComment]);
-  const handleAcceptInteraction = useCallback(async (interaction: SuggestTasksInteraction) => {
-    await acceptInteraction.mutateAsync(interaction);
+  const handleAcceptInteraction = useCallback(async (
+    interaction: SuggestTasksInteraction,
+    selectedClientKeys?: string[],
+  ) => {
+    await acceptInteraction.mutateAsync({ interaction, selectedClientKeys });
   }, [acceptInteraction]);
   const handleRejectInteraction = useCallback(async (interaction: SuggestTasksInteraction, reason?: string) => {
     await rejectInteraction.mutateAsync({ interaction, reason });

@@ -5,6 +5,7 @@ import { Link } from "@/lib/router";
 import { formatAssigneeUserLabel } from "../lib/assignees";
 import {
   buildSuggestedTaskTree,
+  collectSuggestedTaskClientKeys,
   countSuggestedTaskNodes,
   getQuestionAnswerLabels,
   type AskUserQuestionsAnswer,
@@ -18,6 +19,7 @@ import {
 import { cn, formatDateTime, formatShortDate } from "../lib/utils";
 import { MarkdownBody } from "./MarkdownBody";
 import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
 import { Textarea } from "./ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
@@ -26,7 +28,10 @@ interface IssueThreadInteractionCardProps {
   agentMap?: Map<string, Agent>;
   currentUserId?: string | null;
   userLabelMap?: ReadonlyMap<string, string> | null;
-  onAcceptInteraction?: (interaction: SuggestTasksInteraction) => Promise<void> | void;
+  onAcceptInteraction?: (
+    interaction: SuggestTasksInteraction,
+    selectedClientKeys?: string[],
+  ) => Promise<void> | void;
   onRejectInteraction?: (
     interaction: SuggestTasksInteraction,
     reason?: string,
@@ -153,6 +158,10 @@ function TaskTreeNode({
   currentUserId,
   userLabelMap,
   depth = 0,
+  selectedClientKeys,
+  skippedClientKeys,
+  showSelection,
+  onToggleSelection,
 }: {
   node: SuggestedTaskTreeNode;
   createdByClientKey: ReadonlyMap<string, SuggestTasksResultCreatedTask>;
@@ -160,12 +169,18 @@ function TaskTreeNode({
   currentUserId?: string | null;
   userLabelMap?: ReadonlyMap<string, string> | null;
   depth?: number;
+  selectedClientKeys?: ReadonlySet<string>;
+  skippedClientKeys?: ReadonlySet<string>;
+  showSelection?: boolean;
+  onToggleSelection?: (node: SuggestedTaskTreeNode, checked: boolean) => void;
 }) {
   const visibleChildren = node.children.filter((child) => !child.task.hiddenInPreview);
   const hiddenChildCount = node.children
     .filter((child) => child.task.hiddenInPreview)
     .reduce((sum, child) => sum + countSuggestedTaskNodes(child), 0);
   const createdTask = createdByClientKey.get(node.task.clientKey);
+  const isSelected = selectedClientKeys?.has(node.task.clientKey) ?? false;
+  const isSkipped = skippedClientKeys?.has(node.task.clientKey) ?? false;
   const assigneeLabel = resolveActorLabel({
     agentId: node.task.assigneeAgentId,
     userId: node.task.assigneeUserId,
@@ -187,7 +202,15 @@ function TaskTreeNode({
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-start gap-3">
+              {showSelection ? (
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={(checked) => onToggleSelection?.(node, checked === true)}
+                  aria-label={`Include ${node.task.title}`}
+                  className="mt-1"
+                />
+              ) : null}
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-sky-300/70 bg-sky-100/80 text-sky-900">
                 <Sparkles className="h-3.5 w-3.5" />
               </span>
@@ -212,6 +235,10 @@ function TaskTreeNode({
               {createdTask.identifier ?? createdTask.issueId.slice(0, 8)}
               <ChevronRight className="h-3 w-3" />
             </Link>
+          ) : isSkipped ? (
+            <span className="inline-flex items-center rounded-full border border-amber-300/70 bg-amber-100/80 px-2.5 py-1 text-[11px] font-medium text-amber-950">
+              Skipped
+            </span>
           ) : null}
         </div>
 
@@ -256,6 +283,10 @@ function TaskTreeNode({
               currentUserId={currentUserId}
               userLabelMap={userLabelMap}
               depth={depth + 1}
+              selectedClientKeys={selectedClientKeys}
+              skippedClientKeys={skippedClientKeys}
+              showSelection={showSelection}
+              onToggleSelection={onToggleSelection}
             />
           ))}
         </div>
@@ -276,7 +307,10 @@ function SuggestTasksCard({
   agentMap?: Map<string, Agent>;
   currentUserId?: string | null;
   userLabelMap?: ReadonlyMap<string, string> | null;
-  onAcceptInteraction?: (interaction: SuggestTasksInteraction) => Promise<void> | void;
+  onAcceptInteraction?: (
+    interaction: SuggestTasksInteraction,
+    selectedClientKeys?: string[],
+  ) => Promise<void> | void;
   onRejectInteraction?: (
     interaction: SuggestTasksInteraction,
     reason?: string,
@@ -307,13 +341,36 @@ function SuggestTasksCard({
     () => createdTaskMap(interaction.result?.createdTasks),
     [interaction.result?.createdTasks],
   );
+  const skippedClientKeys = useMemo(
+    () => new Set(interaction.result?.skippedClientKeys ?? []),
+    [interaction.result?.skippedClientKeys],
+  );
   const totalTasks = interaction.payload.tasks.length;
+  const [selectedClientKeys, setSelectedClientKeys] = useState<Set<string>>(
+    () => new Set(interaction.payload.tasks.map((task) => task.clientKey)),
+  );
+  const taskSelectionSeed = useMemo(
+    () => interaction.payload.tasks.map((task) => task.clientKey).join("\n"),
+    [interaction.payload.tasks],
+  );
+
+  useEffect(() => {
+    setSelectedClientKeys(new Set(interaction.payload.tasks.map((task) => task.clientKey)));
+  }, [interaction.id, interaction.status, taskSelectionSeed]);
+
+  const taskByClientKey = useMemo(
+    () => new Map(interaction.payload.tasks.map((task) => [task.clientKey, task] as const)),
+    [interaction.payload.tasks],
+  );
+  const selectedCount = selectedClientKeys.size;
+  const createdCount = interaction.result?.createdTasks?.length ?? 0;
+  const skippedCount = interaction.result?.skippedClientKeys?.length ?? 0;
 
   async function handleAccept() {
     if (!onAcceptInteraction) return;
     setWorking("accept");
     try {
-      await onAcceptInteraction(interaction);
+      await onAcceptInteraction(interaction, [...selectedClientKeys]);
     } finally {
       setWorking(null);
     }
@@ -328,6 +385,30 @@ function SuggestTasksCard({
     } finally {
       setWorking(null);
     }
+  }
+
+  function handleToggleSelection(node: SuggestedTaskTreeNode, checked: boolean) {
+    const subtreeClientKeys = collectSuggestedTaskClientKeys(node);
+    setSelectedClientKeys((current) => {
+      const next = new Set(current);
+      if (!checked) {
+        for (const clientKey of subtreeClientKeys) {
+          next.delete(clientKey);
+        }
+        return next;
+      }
+
+      for (const clientKey of subtreeClientKeys) {
+        next.add(clientKey);
+      }
+
+      let parentClientKey = taskByClientKey.get(node.task.clientKey)?.parentClientKey ?? null;
+      while (parentClientKey) {
+        next.add(parentClientKey);
+        parentClientKey = taskByClientKey.get(parentClientKey)?.parentClientKey ?? null;
+      }
+      return next;
+    });
   }
 
   return (
@@ -352,9 +433,26 @@ function SuggestTasksCard({
             agentMap={agentMap}
             currentUserId={currentUserId}
             userLabelMap={userLabelMap}
+            selectedClientKeys={selectedClientKeys}
+            skippedClientKeys={skippedClientKeys}
+            showSelection={interaction.status === "pending"}
+            onToggleSelection={handleToggleSelection}
           />
         ))}
       </div>
+
+      {interaction.status === "accepted" ? (
+        <div className="rounded-2xl border border-emerald-300/60 bg-emerald-50/85 px-4 py-3 text-sm text-emerald-950">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+            Resolution summary
+          </div>
+          <p className="mt-1 leading-6">
+            {skippedCount > 0
+              ? `Created ${createdCount} draft ${createdCount === 1 ? "issue" : "issues"} and skipped ${skippedCount} during review.`
+              : `Created all ${createdCount} draft ${createdCount === 1 ? "issue" : "issues"}.`}
+          </p>
+        </div>
+      ) : null}
 
       {interaction.status === "rejected" && interaction.result?.rejectionReason ? (
         <div className="rounded-2xl border border-rose-300/60 bg-rose-50/85 px-4 py-3 text-sm text-rose-950">
@@ -367,10 +465,23 @@ function SuggestTasksCard({
 
       {interaction.status === "pending" ? (
         <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              {selectedCount === totalTasks
+                ? `All ${totalTasks} draft ${totalTasks === 1 ? "issue" : "issues"} selected`
+                : `${selectedCount} of ${totalTasks} draft ${totalTasks === 1 ? "issue" : "issues"} selected`}
+            </span>
+            {selectedCount < totalTasks ? (
+              <span>
+                {totalTasks - selectedCount} will be skipped if you accept this interaction.
+              </span>
+            ) : null}
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
-              disabled={!onAcceptInteraction || working !== null}
+              disabled={!onAcceptInteraction || working !== null || selectedCount === 0}
               onClick={() => void handleAccept()}
             >
               {working === "accept" ? (
@@ -379,7 +490,7 @@ function SuggestTasksCard({
                   Accepting...
                 </>
               ) : (
-                "Accept drafts"
+                selectedCount === totalTasks ? "Accept drafts" : "Accept selected drafts"
               )}
             </Button>
             <Button
@@ -390,6 +501,16 @@ function SuggestTasksCard({
             >
               Reject
             </Button>
+            {selectedCount < totalTasks ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={working !== null}
+                onClick={() => setSelectedClientKeys(new Set(interaction.payload.tasks.map((task) => task.clientKey)))}
+              >
+                Reset selection
+              </Button>
+            ) : null}
           </div>
 
           {rejecting ? (
