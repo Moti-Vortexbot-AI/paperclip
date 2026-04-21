@@ -440,6 +440,12 @@ export function issueThreadInteractionService(db: Db) {
       return expired;
     }
 
+    const interaction = hydrateInteraction(args.current) as RequestConfirmationInteraction;
+    const reason = args.input.reason?.trim() ?? "";
+    if (interaction.payload.rejectRequiresReason === true && reason.length === 0) {
+      throw unprocessable("A decline reason is required for this confirmation");
+    }
+
     const now = new Date();
     const [updated] = await db
       .update(issueThreadInteractions)
@@ -448,7 +454,7 @@ export function issueThreadInteractionService(db: Db) {
         result: {
           version: 1,
           outcome: "rejected",
-          reason: args.input.reason?.trim() || null,
+          reason: reason || null,
         },
         resolvedByAgentId: args.actor.agentId ?? null,
         resolvedByUserId: args.actor.userId ?? null,

@@ -561,6 +561,27 @@ describeEmbeddedPostgres("issueThreadInteractionService", () => {
       },
       resolvedByUserId: "local-board",
     });
+
+    const requiresReason = await interactionsSvc.create({
+      id: issueId,
+      companyId,
+    }, {
+      kind: "request_confirmation",
+      payload: {
+        version: 1,
+        prompt: "Decline only with a reason?",
+        rejectRequiresReason: true,
+      },
+    }, {
+      userId: "local-board",
+    });
+
+    await expect(interactionsSvc.rejectInteraction({
+      id: issueId,
+      companyId,
+    }, requiresReason.id, {}, {
+      userId: "local-board",
+    })).rejects.toThrow("A decline reason is required for this confirmation");
   });
 
   it("expires supersedable request confirmations when a user comments", async () => {

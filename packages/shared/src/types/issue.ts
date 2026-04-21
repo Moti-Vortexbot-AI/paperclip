@@ -360,6 +360,8 @@ export interface RequestConfirmationPayload {
   prompt: string;
   acceptLabel?: string | null;
   rejectLabel?: string | null;
+  rejectRequiresReason?: boolean;
+  rejectReasonLabel?: string | null;
   detailsMarkdown?: string | null;
   supersedeOnUserComment?: boolean;
   target?: RequestConfirmationTarget | null;

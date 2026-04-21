@@ -6,6 +6,7 @@ import type {
 import type { IssueTimelineEvent } from "../lib/issue-timeline-events";
 import type {
   AskUserQuestionsInteraction,
+  RequestConfirmationInteraction,
   SuggestTasksInteraction,
 } from "../lib/issue-thread-interactions";
 
@@ -177,6 +178,49 @@ function createAskUserQuestionsInteraction(
   };
 }
 
+function createRequestConfirmationInteraction(
+  overrides: Partial<RequestConfirmationInteraction>,
+): RequestConfirmationInteraction {
+  return {
+    id: "interaction-confirmation-default",
+    companyId: issueThreadInteractionFixtureMeta.companyId,
+    issueId: issueThreadInteractionFixtureMeta.issueId,
+    kind: "request_confirmation",
+    title: "Approve the proposed plan",
+    summary:
+      "The assignee is waiting on a direct board decision before continuing from the plan document.",
+    status: "pending",
+    continuationPolicy: "wake_assignee",
+    createdByAgentId: "agent-codex",
+    createdByUserId: null,
+    resolvedByAgentId: null,
+    resolvedByUserId: null,
+    createdAt: new Date("2026-04-20T14:30:00.000Z"),
+    updatedAt: new Date("2026-04-20T14:30:00.000Z"),
+    resolvedAt: null,
+    payload: {
+      version: 1,
+      prompt: "Approve the plan and let the assignee start implementation?",
+      acceptLabel: "Approve plan",
+      rejectLabel: "Request revisions",
+      rejectRequiresReason: true,
+      rejectReasonLabel: "Describe the plan changes needed before approval",
+      detailsMarkdown:
+        "This confirmation watches the `plan` document revision so stale approvals are blocked if the plan changes.",
+      supersedeOnUserComment: true,
+      target: {
+        type: "issue_document",
+        issueId: issueThreadInteractionFixtureMeta.issueId,
+        key: "plan",
+        revisionId: "11111111-1111-4111-8111-111111111111",
+        revisionNumber: 3,
+      },
+    },
+    result: null,
+    ...overrides,
+  };
+}
+
 export const pendingSuggestedTasksInteraction = createSuggestTasksInteraction({});
 
 export const acceptedSuggestedTasksInteraction = createSuggestTasksInteraction({
@@ -263,6 +307,65 @@ export const answeredAskUserQuestionsInteraction = createAskUserQuestionsInterac
   },
 });
 
+export const pendingRequestConfirmationInteraction = createRequestConfirmationInteraction({});
+
+export const acceptedRequestConfirmationInteraction = createRequestConfirmationInteraction({
+  id: "interaction-confirmation-accepted",
+  status: "accepted",
+  resolvedByUserId: issueThreadInteractionFixtureMeta.currentUserId,
+  resolvedAt: new Date("2026-04-20T14:34:00.000Z"),
+  updatedAt: new Date("2026-04-20T14:34:00.000Z"),
+  result: {
+    version: 1,
+    outcome: "accepted",
+  },
+});
+
+export const rejectedRequestConfirmationInteraction = createRequestConfirmationInteraction({
+  id: "interaction-confirmation-rejected",
+  status: "rejected",
+  resolvedByUserId: issueThreadInteractionFixtureMeta.currentUserId,
+  resolvedAt: new Date("2026-04-20T14:36:00.000Z"),
+  updatedAt: new Date("2026-04-20T14:36:00.000Z"),
+  result: {
+    version: 1,
+    outcome: "rejected",
+    reason: "Split the migration and UI work into separate reviewable steps.",
+  },
+});
+
+export const commentExpiredRequestConfirmationInteraction = createRequestConfirmationInteraction({
+  id: "interaction-confirmation-expired-comment",
+  status: "expired",
+  resolvedByUserId: issueThreadInteractionFixtureMeta.currentUserId,
+  resolvedAt: new Date("2026-04-20T14:38:00.000Z"),
+  updatedAt: new Date("2026-04-20T14:38:00.000Z"),
+  result: {
+    version: 1,
+    outcome: "superseded_by_comment",
+    commentId: "22222222-2222-4222-8222-222222222222",
+  },
+});
+
+export const staleTargetRequestConfirmationInteraction = createRequestConfirmationInteraction({
+  id: "interaction-confirmation-expired-target",
+  status: "expired",
+  resolvedByAgentId: "agent-codex",
+  resolvedAt: new Date("2026-04-20T14:40:00.000Z"),
+  updatedAt: new Date("2026-04-20T14:40:00.000Z"),
+  result: {
+    version: 1,
+    outcome: "stale_target",
+    staleTarget: {
+      type: "issue_document",
+      issueId: issueThreadInteractionFixtureMeta.issueId,
+      key: "plan",
+      revisionId: "11111111-1111-4111-8111-111111111111",
+      revisionNumber: 3,
+    },
+  },
+});
+
 export const issueThreadInteractionComments: IssueChatComment[] = [
   createComment({
     id: "comment-thread-board",
@@ -333,5 +436,6 @@ export const issueThreadInteractionTranscriptsByRunId = new Map<
 
 export const mixedIssueThreadInteractions = [
   acceptedSuggestedTasksInteraction,
+  pendingRequestConfirmationInteraction,
   pendingAskUserQuestionsInteraction,
 ];

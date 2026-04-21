@@ -10,6 +10,8 @@ describe("issue thread interaction schemas", () => {
         prompt: "Apply this plan?",
         acceptLabel: "Apply",
         rejectLabel: "Revise",
+        rejectRequiresReason: true,
+        rejectReasonLabel: "What needs to change?",
         detailsMarkdown: "The current plan document will be accepted as-is.",
         supersedeOnUserComment: true,
       },
@@ -22,6 +24,8 @@ describe("issue thread interaction schemas", () => {
         prompt: "Apply this plan?",
         acceptLabel: "Apply",
         rejectLabel: "Revise",
+        rejectRequiresReason: true,
+        rejectReasonLabel: "What needs to change?",
         supersedeOnUserComment: true,
       },
     });

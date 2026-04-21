@@ -12,7 +12,6 @@ import type {
   IssueLabel,
   IssueThreadInteraction,
   IssueWorkProduct,
-  SuggestTasksInteraction,
   UpsertIssueDocument,
 } from "@paperclipai/shared";
 import { api } from "./client";
@@ -111,9 +110,9 @@ export const issuesApi = {
     interactionId: string,
     data?: { selectedClientKeys?: string[] },
   ) =>
-    api.post<SuggestTasksInteraction>(`/issues/${id}/interactions/${interactionId}/accept`, data ?? {}),
+    api.post<IssueThreadInteraction>(`/issues/${id}/interactions/${interactionId}/accept`, data ?? {}),
   rejectInteraction: (id: string, interactionId: string, reason?: string) =>
-    api.post<SuggestTasksInteraction>(`/issues/${id}/interactions/${interactionId}/reject`, reason ? { reason } : {}),
+    api.post<IssueThreadInteraction>(`/issues/${id}/interactions/${interactionId}/reject`, reason ? { reason } : {}),
   respondToInteraction: (
     id: string,
     interactionId: string,

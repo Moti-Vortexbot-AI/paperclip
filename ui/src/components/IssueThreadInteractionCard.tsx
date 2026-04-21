@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Agent } from "@paperclipai/shared";
-import { AlertTriangle, CheckCircle2, ChevronRight, CircleDashed, GitBranch, ListChecks, Loader2, MessageSquareQuote, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, CircleDashed, FileText, GitBranch, ListChecks, Loader2, MessageSquareQuote, XCircle } from "lucide-react";
 import { Link } from "@/lib/router";
 import { formatAssigneeUserLabel } from "../lib/assignees";
 import {
@@ -11,6 +11,7 @@ import {
   type AskUserQuestionsAnswer,
   type AskUserQuestionsInteraction,
   type IssueThreadInteraction,
+  type RequestConfirmationInteraction,
   type SuggestTasksInteraction,
   type SuggestTasksResultCreatedTask,
   type SuggestedTaskDraft,
@@ -30,11 +31,11 @@ interface IssueThreadInteractionCardProps {
   currentUserId?: string | null;
   userLabelMap?: ReadonlyMap<string, string> | null;
   onAcceptInteraction?: (
-    interaction: SuggestTasksInteraction,
+    interaction: SuggestTasksInteraction | RequestConfirmationInteraction,
     selectedClientKeys?: string[],
   ) => Promise<void> | void;
   onRejectInteraction?: (
-    interaction: SuggestTasksInteraction,
+    interaction: SuggestTasksInteraction | RequestConfirmationInteraction,
     reason?: string,
   ) => Promise<void> | void;
   onSubmitInteractionAnswers?: (
@@ -80,7 +81,16 @@ function statusLabel(status: IssueThreadInteraction["status"]) {
 }
 
 function interactionKindLabel(kind: IssueThreadInteraction["kind"]) {
-  return kind === "suggest_tasks" ? "Suggested tasks" : "Ask user questions";
+  switch (kind) {
+    case "suggest_tasks":
+      return "Suggested tasks";
+    case "ask_user_questions":
+      return "Ask user questions";
+    case "request_confirmation":
+      return "Request confirmation";
+    default:
+      return kind;
+  }
 }
 
 function statusIcon(status: IssueThreadInteraction["status"]) {
@@ -816,6 +826,230 @@ function AskUserQuestionsCard({
   );
 }
 
+function RequestConfirmationTargetLink({
+  interaction,
+}: {
+  interaction: RequestConfirmationInteraction;
+}) {
+  const target = interaction.payload.target ?? interaction.result?.staleTarget ?? null;
+  if (!target) return null;
+
+  if (target.type === "issue_document") {
+    const issueId = target.issueId ?? interaction.issueId;
+    return (
+      <Link
+        to={`/issues/${issueId}#document-${encodeURIComponent(target.key)}`}
+        className="inline-flex items-center gap-2 rounded-sm border border-border/70 bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-sky-500/70 hover:bg-sky-500/10"
+      >
+        <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="min-w-0 truncate">
+          Document: {target.key}
+          {target.revisionNumber ? ` rev ${target.revisionNumber}` : ""}
+        </span>
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+      </Link>
+    );
+  }
+
+  return null;
+}
+
+function RequestConfirmationResolution({
+  interaction,
+}: {
+  interaction: RequestConfirmationInteraction;
+}) {
+  const outcome = interaction.result?.outcome;
+
+  if (interaction.status === "accepted") {
+    return (
+      <div className="rounded-sm border border-emerald-500/60 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-100">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+          Confirmed
+        </div>
+        <p className="mt-1 leading-6">The request was confirmed and is now disabled in the thread.</p>
+      </div>
+    );
+  }
+
+  if (interaction.status === "rejected") {
+    return (
+      <div className="rounded-sm border border-rose-500/60 bg-rose-500/10 px-4 py-3 text-sm text-rose-900 dark:text-rose-100">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700">
+          Declined
+        </div>
+        <p className={cn(
+          "mt-1 leading-6",
+          !interaction.result?.reason && "text-rose-900/75",
+        )}>
+          {interaction.result?.reason || "No reason provided."}
+        </p>
+      </div>
+    );
+  }
+
+  if (interaction.status === "expired") {
+    const expiredByComment = outcome === "superseded_by_comment";
+    return (
+      <div className="rounded-sm border border-amber-500/60 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">
+          {expiredByComment ? "Expired by comment" : "Expired by target change"}
+        </div>
+        <p className="mt-1 leading-6">
+          {expiredByComment
+            ? "A board comment superseded this confirmation before it was resolved."
+            : "The requested target changed before this confirmation was resolved."}
+        </p>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function RequestConfirmationCard({
+  interaction,
+  onAcceptInteraction,
+  onRejectInteraction,
+}: {
+  interaction: RequestConfirmationInteraction;
+  onAcceptInteraction?: (
+    interaction: RequestConfirmationInteraction,
+  ) => Promise<void> | void;
+  onRejectInteraction?: (
+    interaction: RequestConfirmationInteraction,
+    reason?: string,
+  ) => Promise<void> | void;
+}) {
+  const [rejecting, setRejecting] = useState(false);
+  const [working, setWorking] = useState<"accept" | "reject" | null>(null);
+  const [rejectReason, setRejectReason] = useState(interaction.result?.reason ?? "");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const rejectRequiresReason = interaction.payload.rejectRequiresReason === true;
+  const trimmedRejectReason = rejectReason.trim();
+  const canReject = !rejectRequiresReason || trimmedRejectReason.length > 0;
+
+  useEffect(() => {
+    setRejectReason(interaction.result?.reason ?? "");
+    setActionError(null);
+    if (interaction.status !== "pending") {
+      setRejecting(false);
+      setWorking(null);
+    }
+  }, [interaction.id, interaction.result?.reason, interaction.status]);
+
+  async function handleAccept() {
+    if (!onAcceptInteraction) return;
+    setWorking("accept");
+    setActionError(null);
+    try {
+      await onAcceptInteraction(interaction);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Unable to confirm this request");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleReject() {
+    if (!onRejectInteraction || !canReject) return;
+    setWorking("reject");
+    setActionError(null);
+    try {
+      await onRejectInteraction(interaction, trimmedRejectReason || undefined);
+      setRejecting(false);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Unable to decline this request");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-3 rounded-sm border border-border/70 bg-background/75 p-4">
+        <div className="text-sm font-semibold leading-6 text-foreground">
+          {interaction.payload.prompt}
+        </div>
+        {interaction.payload.detailsMarkdown ? (
+          <div className="border-t border-border/60 pt-3 text-sm">
+            <MarkdownBody>{interaction.payload.detailsMarkdown}</MarkdownBody>
+          </div>
+        ) : null}
+        <RequestConfirmationTargetLink interaction={interaction} />
+      </div>
+
+      {interaction.status === "pending" ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              size="sm"
+              disabled={!onAcceptInteraction || working !== null}
+              onClick={() => void handleAccept()}
+            >
+              {working === "accept" ? (
+                <>
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  Confirming...
+                </>
+              ) : (
+                interaction.payload.acceptLabel ?? "Confirm"
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!onRejectInteraction || working !== null}
+              onClick={() => setRejecting((current) => !current)}
+            >
+              {interaction.payload.rejectLabel ?? "Decline"}
+            </Button>
+          </div>
+
+          {rejecting ? (
+            <div className="space-y-3 rounded-sm border border-border/70 bg-background/75 p-3">
+              <Textarea
+                value={rejectReason}
+                onChange={(event) => setRejectReason(event.target.value)}
+                placeholder={interaction.payload.rejectReasonLabel ?? "Add a short reason for declining this request"}
+                className="min-h-24 bg-background text-sm"
+              />
+              {rejectRequiresReason && !canReject ? (
+                <p className="text-xs text-destructive">A decline reason is required.</p>
+              ) : null}
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!onRejectInteraction || working !== null || !canReject}
+                  onClick={() => void handleReject()}
+                >
+                  {working === "reject" ? (
+                    <>
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    interaction.payload.rejectLabel ?? "Decline"
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {actionError ? (
+            <div className="rounded-sm border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {actionError}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <RequestConfirmationResolution interaction={interaction} />
+      )}
+    </div>
+  );
+}
+
 export function IssueThreadInteractionCard({
   interaction,
   agentMap,
@@ -868,7 +1102,9 @@ export function IssueThreadInteractionCard({
             {interaction.title
               ?? (interaction.kind === "suggest_tasks"
                 ? "Suggested task tree"
-                : interaction.payload.title ?? "Questions for the operator")}
+                : interaction.kind === "ask_user_questions"
+                  ? interaction.payload.title ?? "Questions for the operator"
+                  : "Confirmation requested")}
           </div>
           {interaction.summary ? (
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
@@ -900,10 +1136,16 @@ export function IssueThreadInteractionCard({
             onAcceptInteraction={onAcceptInteraction}
             onRejectInteraction={onRejectInteraction}
           />
-        ) : (
+        ) : interaction.kind === "ask_user_questions" ? (
           <AskUserQuestionsCard
             interaction={interaction}
             onSubmitInteractionAnswers={onSubmitInteractionAnswers}
+          />
+        ) : (
+          <RequestConfirmationCard
+            interaction={interaction}
+            onAcceptInteraction={onAcceptInteraction}
+            onRejectInteraction={onRejectInteraction}
           />
         )}
       </div>

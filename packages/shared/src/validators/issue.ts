@@ -333,6 +333,8 @@ export const requestConfirmationPayloadSchema = z.object({
   prompt: z.string().trim().min(1).max(1000),
   acceptLabel: z.string().trim().min(1).max(80).nullable().optional(),
   rejectLabel: z.string().trim().min(1).max(80).nullable().optional(),
+  rejectRequiresReason: z.boolean().optional(),
+  rejectReasonLabel: z.string().trim().min(1).max(160).nullable().optional(),
   detailsMarkdown: z.string().max(20000).nullable().optional(),
   supersedeOnUserComment: z.boolean().optional(),
   target: requestConfirmationTargetSchema.nullable().optional(),

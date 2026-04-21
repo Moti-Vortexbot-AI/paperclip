@@ -10,6 +10,11 @@ export type {
   IssueThreadInteractionBase,
   IssueThreadInteractionContinuationPolicy,
   IssueThreadInteractionStatus,
+  RequestConfirmationInteraction,
+  RequestConfirmationIssueDocumentTarget,
+  RequestConfirmationPayload,
+  RequestConfirmationResult,
+  RequestConfirmationTarget,
   SuggestedTaskDraft,
   SuggestTasksInteraction,
   SuggestTasksPayload,
@@ -21,6 +26,7 @@ import type {
   AskUserQuestionsInteraction,
   AskUserQuestionsQuestion,
   IssueThreadInteraction,
+  RequestConfirmationInteraction,
   SuggestedTaskDraft,
   SuggestTasksInteraction,
   SuggestTasksResultCreatedTask,
@@ -39,7 +45,11 @@ export function isIssueThreadInteraction(
   return typeof candidate.id === "string"
     && typeof candidate.companyId === "string"
     && typeof candidate.issueId === "string"
-    && (candidate.kind === "suggest_tasks" || candidate.kind === "ask_user_questions");
+    && (
+      candidate.kind === "suggest_tasks"
+      || candidate.kind === "ask_user_questions"
+      || candidate.kind === "request_confirmation"
+    );
 }
 
 export function buildIssueThreadInteractionSummary(
@@ -59,6 +69,18 @@ export function buildIssueThreadInteractionSummary(
       return count === 1 ? "Rejected 1 task" : `Rejected ${count} tasks`;
     }
     return count === 1 ? "Suggested 1 task" : `Suggested ${count} tasks`;
+  }
+
+  if (interaction.kind === "request_confirmation") {
+    if (interaction.status === "accepted") return "Confirmed request";
+    if (interaction.status === "rejected") return "Declined request";
+    if (interaction.status === "expired") {
+      const outcome = interaction.result?.outcome;
+      if (outcome === "superseded_by_comment") return "Confirmation expired after comment";
+      if (outcome === "stale_target") return "Confirmation expired after target changed";
+      return "Confirmation expired";
+    }
+    return "Requested confirmation";
   }
 
   const count = interaction.payload.questions.length;

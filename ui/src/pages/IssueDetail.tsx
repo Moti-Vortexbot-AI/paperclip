@@ -120,10 +120,12 @@ import {
   type IssueAttachment,
   type IssueComment,
   type IssueThreadInteraction,
+  type RequestConfirmationInteraction,
   type SuggestTasksInteraction,
 } from "@paperclipai/shared";
 
 type CommentReassignment = IssueCommentReassignment;
+type ActionableIssueThreadInteraction = SuggestTasksInteraction | RequestConfirmationInteraction;
 type IssueDetailComment = (IssueComment | OptimisticIssueComment) & {
   runId?: string | null;
   runAgentId?: string | null;
@@ -543,10 +545,10 @@ type IssueDetailChatTabProps = {
   interruptingQueuedRunId: string | null;
   onImageClick: (src: string) => void;
   onAcceptInteraction: (
-    interaction: SuggestTasksInteraction,
+    interaction: ActionableIssueThreadInteraction,
     selectedClientKeys?: string[],
   ) => Promise<void>;
-  onRejectInteraction: (interaction: SuggestTasksInteraction, reason?: string) => Promise<void>;
+  onRejectInteraction: (interaction: ActionableIssueThreadInteraction, reason?: string) => Promise<void>;
   onSubmitInteractionAnswers: (
     interaction: IssueThreadInteraction,
     answers: AskUserQuestionsAnswer[],
@@ -1547,20 +1549,26 @@ export function IssueDetail() {
       interaction,
       selectedClientKeys,
     }: {
-      interaction: SuggestTasksInteraction;
+      interaction: ActionableIssueThreadInteraction;
       selectedClientKeys?: string[];
     }) => issuesApi.acceptInteraction(issueId!, interaction.id, { selectedClientKeys }),
     onSuccess: (interaction) => {
       upsertInteractionInCache(interaction);
-      if (resolvedCompanyId && issue?.id) {
+      if (interaction.kind === "suggest_tasks" && resolvedCompanyId && issue?.id) {
         queryClient.invalidateQueries({ queryKey: queryKeys.issues.listByParent(resolvedCompanyId, issue.id) });
       }
       invalidateIssueDetail();
       invalidateIssueCollections();
-      const createdCount = interaction.result?.createdTasks?.length ?? 0;
-      const skippedCount = interaction.result?.skippedClientKeys?.length ?? 0;
+      const createdCount = interaction.kind === "suggest_tasks"
+        ? interaction.result?.createdTasks?.length ?? 0
+        : 0;
+      const skippedCount = interaction.kind === "suggest_tasks"
+        ? interaction.result?.skippedClientKeys?.length ?? 0
+        : 0;
       pushToast({
-        title: skippedCount > 0
+        title: interaction.kind === "request_confirmation"
+          ? "Request confirmed"
+          : skippedCount > 0
           ? `Accepted ${createdCount} draft${createdCount === 1 ? "" : "s"} and skipped ${skippedCount}`
           : "Suggested tasks accepted",
         tone: "success",
@@ -1575,14 +1583,14 @@ export function IssueDetail() {
     },
   });
   const rejectInteraction = useMutation({
-    mutationFn: ({ interaction, reason }: { interaction: SuggestTasksInteraction; reason?: string }) =>
+    mutationFn: ({ interaction, reason }: { interaction: ActionableIssueThreadInteraction; reason?: string }) =>
       issuesApi.rejectInteraction(issueId!, interaction.id, reason),
     onSuccess: (interaction) => {
       upsertInteractionInCache(interaction);
       invalidateIssueDetail();
       invalidateIssueCollections();
       pushToast({
-        title: "Suggestion rejected",
+        title: interaction.kind === "request_confirmation" ? "Request declined" : "Suggestion rejected",
         tone: "success",
       });
     },
@@ -2349,12 +2357,12 @@ export function IssueDetail() {
     await interruptQueuedComment.mutateAsync(runId);
   }, [interruptQueuedComment]);
   const handleAcceptInteraction = useCallback(async (
-    interaction: SuggestTasksInteraction,
+    interaction: ActionableIssueThreadInteraction,
     selectedClientKeys?: string[],
   ) => {
     await acceptInteraction.mutateAsync({ interaction, selectedClientKeys });
   }, [acceptInteraction]);
-  const handleRejectInteraction = useCallback(async (interaction: SuggestTasksInteraction, reason?: string) => {
+  const handleRejectInteraction = useCallback(async (interaction: ActionableIssueThreadInteraction, reason?: string) => {
     await rejectInteraction.mutateAsync({ interaction, reason });
   }, [rejectInteraction]);
   const handleSubmitInteractionAnswers = useCallback(async (

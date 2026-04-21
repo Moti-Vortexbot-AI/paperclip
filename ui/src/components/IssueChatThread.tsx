@@ -49,6 +49,7 @@ import type {
   AskUserQuestionsAnswer,
   AskUserQuestionsInteraction,
   IssueThreadInteraction,
+  RequestConfirmationInteraction,
   SuggestTasksInteraction,
 } from "../lib/issue-thread-interactions";
 import { isIssueThreadInteraction } from "../lib/issue-thread-interactions";
@@ -123,11 +124,11 @@ interface IssueChatMessageContext {
   interruptingQueuedRunId?: string | null;
   onImageClick?: (src: string) => void;
   onAcceptInteraction?: (
-    interaction: SuggestTasksInteraction,
+    interaction: SuggestTasksInteraction | RequestConfirmationInteraction,
     selectedClientKeys?: string[],
   ) => Promise<void> | void;
   onRejectInteraction?: (
-    interaction: SuggestTasksInteraction,
+    interaction: SuggestTasksInteraction | RequestConfirmationInteraction,
     reason?: string,
   ) => Promise<void> | void;
   onSubmitInteractionAnswers?: (
@@ -278,11 +279,11 @@ interface IssueChatThreadProps {
   stoppingRunId?: string | null;
   onImageClick?: (src: string) => void;
   onAcceptInteraction?: (
-    interaction: SuggestTasksInteraction,
+    interaction: SuggestTasksInteraction | RequestConfirmationInteraction,
     selectedClientKeys?: string[],
   ) => Promise<void> | void;
   onRejectInteraction?: (
-    interaction: SuggestTasksInteraction,
+    interaction: SuggestTasksInteraction | RequestConfirmationInteraction,
     reason?: string,
   ) => Promise<void> | void;
   onSubmitInteractionAnswers?: (

@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import {
   acceptedSuggestedTasksInteraction,
   answeredAskUserQuestionsInteraction,
+  acceptedRequestConfirmationInteraction,
+  commentExpiredRequestConfirmationInteraction,
   issueThreadInteractionComments,
   issueThreadInteractionEvents,
   issueThreadInteractionFixtureMeta,
@@ -13,12 +15,16 @@ import {
   issueThreadInteractionTranscriptsByRunId,
   mixedIssueThreadInteractions,
   pendingAskUserQuestionsInteraction,
+  pendingRequestConfirmationInteraction,
   pendingSuggestedTasksInteraction,
+  rejectedRequestConfirmationInteraction,
   rejectedSuggestedTasksInteraction,
+  staleTargetRequestConfirmationInteraction,
 } from "@/fixtures/issueThreadInteractionFixtures";
 import type {
   AskUserQuestionsAnswer,
   AskUserQuestionsInteraction,
+  RequestConfirmationInteraction,
   SuggestTasksInteraction,
 } from "@/lib/issue-thread-interactions";
 import { storybookAgentMap } from "../fixtures/paperclipData";
@@ -155,13 +161,38 @@ function InteractiveAskUserQuestionsCard() {
   );
 }
 
+function InteractiveRequestConfirmationCard() {
+  const [interaction, setInteraction] = useState<RequestConfirmationInteraction>(
+    pendingRequestConfirmationInteraction,
+  );
+
+  return (
+    <IssueThreadInteractionCard
+      interaction={interaction}
+      agentMap={storybookAgentMap}
+      currentUserId={issueThreadInteractionFixtureMeta.currentUserId}
+      userLabelMap={boardUserLabels}
+      onAcceptInteraction={() => setInteraction(acceptedRequestConfirmationInteraction)}
+      onRejectInteraction={(_interaction, reason) =>
+        setInteraction({
+          ...rejectedRequestConfirmationInteraction,
+          result: {
+            version: 1,
+            outcome: "rejected",
+            reason: reason || rejectedRequestConfirmationInteraction.result?.reason || null,
+          },
+        })}
+    />
+  );
+}
+
 const meta = {
   title: "Chat & Comments/Issue Thread Interactions",
   parameters: {
     docs: {
       description: {
         component:
-          "Prototype-only interaction cards for `suggest_tasks` and `ask_user_questions`, shown both in isolation and inside the real `IssueChatThread` feed.",
+          "Interaction cards for `suggest_tasks`, `ask_user_questions`, and `request_confirmation`, shown both in isolation and inside the real `IssueChatThread` feed.",
       },
     },
   },
@@ -251,14 +282,99 @@ export const AskUserQuestionsAnswered: Story = {
   ),
 };
 
+export const RequestConfirmationPending: Story = {
+  render: () => (
+    <StoryFrame>
+      <ScenarioCard
+        title="Pending request confirmation"
+        description="A plan approval waits for an explicit board decision and requires a decline reason."
+      >
+        <InteractiveRequestConfirmationCard />
+      </ScenarioCard>
+    </StoryFrame>
+  ),
+};
+
+export const RequestConfirmationAccepted: Story = {
+  render: () => (
+    <StoryFrame>
+      <ScenarioCard
+        title="Accepted request confirmation"
+        description="The resolved state remains visible without active controls."
+      >
+        <IssueThreadInteractionCard
+          interaction={acceptedRequestConfirmationInteraction}
+          agentMap={storybookAgentMap}
+          currentUserId={issueThreadInteractionFixtureMeta.currentUserId}
+          userLabelMap={boardUserLabels}
+        />
+      </ScenarioCard>
+    </StoryFrame>
+  ),
+};
+
+export const RequestConfirmationRejected: Story = {
+  render: () => (
+    <StoryFrame>
+      <ScenarioCard
+        title="Rejected request confirmation"
+        description="The decline reason stays attached to the request in the thread."
+      >
+        <IssueThreadInteractionCard
+          interaction={rejectedRequestConfirmationInteraction}
+          agentMap={storybookAgentMap}
+          currentUserId={issueThreadInteractionFixtureMeta.currentUserId}
+          userLabelMap={boardUserLabels}
+        />
+      </ScenarioCard>
+    </StoryFrame>
+  ),
+};
+
+export const RequestConfirmationExpiredByComment: Story = {
+  render: () => (
+    <StoryFrame>
+      <ScenarioCard
+        title="Expired by comment"
+        description="A board comment superseded the request before resolution."
+      >
+        <IssueThreadInteractionCard
+          interaction={commentExpiredRequestConfirmationInteraction}
+          agentMap={storybookAgentMap}
+          currentUserId={issueThreadInteractionFixtureMeta.currentUserId}
+          userLabelMap={boardUserLabels}
+        />
+      </ScenarioCard>
+    </StoryFrame>
+  ),
+};
+
+export const RequestConfirmationExpiredByTargetChange: Story = {
+  render: () => (
+    <StoryFrame>
+      <ScenarioCard
+        title="Expired by target change"
+        description="The watched plan document moved to a newer revision before approval."
+      >
+        <IssueThreadInteractionCard
+          interaction={staleTargetRequestConfirmationInteraction}
+          agentMap={storybookAgentMap}
+          currentUserId={issueThreadInteractionFixtureMeta.currentUserId}
+          userLabelMap={boardUserLabels}
+        />
+      </ScenarioCard>
+    </StoryFrame>
+  ),
+};
+
 export const ReviewSurface: Story = {
   render: () => (
     <StoryFrame>
       <section className="paperclip-story__frame p-6">
         <div className="paperclip-story__label">Thread interactions</div>
         <div className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-          This prototype keeps the whole system non-persistent while pressure-testing the two planned
-          interaction kinds directly inside the issue chat surface. The card language leans closer to
+          This review surface pressure-tests the thread interaction kinds directly inside the issue
+          chat surface. The card language leans closer to
           annotated review sheets than generic admin widgets so the objects feel like first-class work
           artifacts in the thread.
         </div>
@@ -319,10 +435,62 @@ export const ReviewSurface: Story = {
         </div>
       </Section>
 
+      <Section eyebrow="Request Confirmation" title="Plan approval and compact resolution states">
+        <div className="grid gap-6 xl:grid-cols-2">
+          <ScenarioCard
+            title="Plan approval"
+            description="The pending card links to the watched plan revision and requires a reason when declined."
+          >
+            <InteractiveRequestConfirmationCard />
+          </ScenarioCard>
+          <ScenarioCard
+            title="Accepted"
+            description="Accepted confirmations stay visible as resolved work artifacts."
+          >
+            <IssueThreadInteractionCard
+              interaction={acceptedRequestConfirmationInteraction}
+              agentMap={storybookAgentMap}
+              currentUserId={issueThreadInteractionFixtureMeta.currentUserId}
+              userLabelMap={boardUserLabels}
+            />
+          </ScenarioCard>
+          <ScenarioCard
+            title="Rejected"
+            description="Rejected confirmations keep the board's decline reason attached."
+          >
+            <IssueThreadInteractionCard
+              interaction={rejectedRequestConfirmationInteraction}
+              agentMap={storybookAgentMap}
+              currentUserId={issueThreadInteractionFixtureMeta.currentUserId}
+              userLabelMap={boardUserLabels}
+            />
+          </ScenarioCard>
+          <ScenarioCard
+            title="Expired states"
+            description="Comment and target-change expiry states are compact and disabled."
+          >
+            <div className="space-y-4">
+              <IssueThreadInteractionCard
+                interaction={commentExpiredRequestConfirmationInteraction}
+                agentMap={storybookAgentMap}
+                currentUserId={issueThreadInteractionFixtureMeta.currentUserId}
+                userLabelMap={boardUserLabels}
+              />
+              <IssueThreadInteractionCard
+                interaction={staleTargetRequestConfirmationInteraction}
+                agentMap={storybookAgentMap}
+                currentUserId={issueThreadInteractionFixtureMeta.currentUserId}
+                userLabelMap={boardUserLabels}
+              />
+            </div>
+          </ScenarioCard>
+        </div>
+      </Section>
+
       <Section eyebrow="Mixed Feed" title="Interaction cards in the real issue thread">
         <ScenarioCard
           title="IssueChatThread composition"
-          description="Comments, timeline events, accepted task suggestions, a pending question form, and an active run share the same feed without persistence work."
+          description="Comments, timeline events, accepted task suggestions, a pending confirmation, a pending question form, and an active run share the same feed."
         >
           <div className="overflow-hidden rounded-[32px] border border-border/70 bg-[linear-gradient(135deg,rgba(14,165,233,0.08),transparent_28%),linear-gradient(180deg,rgba(245,158,11,0.08),transparent_42%),var(--background)] p-5 shadow-[0_30px_80px_rgba(15,23,42,0.10)]">
             <IssueChatThread
@@ -349,7 +517,7 @@ export const ReviewSurface: Story = {
     docs: {
       description: {
         story:
-          "Covers the prototype states called out in [PAP-1709](/PAP/issues/PAP-1709): suggested-task previews, collapsed descendants, rejection reasons, multi-question answers, and a mixed issue thread.",
+          "Covers the prototype states called out in [PAP-1709](/PAP/issues/PAP-1709): suggested-task previews, collapsed descendants, rejection reasons, request confirmations, multi-question answers, and a mixed issue thread.",
       },
     },
   },
