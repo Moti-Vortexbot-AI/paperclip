@@ -317,8 +317,10 @@ export const askUserQuestionsResultSchema = z.object({
 
 const requestConfirmationHrefSchema = z.string().trim().min(1).max(2000).refine((value) => {
   const lower = value.toLowerCase();
-  return !lower.startsWith("javascript:") && !lower.startsWith("data:");
-}, "href must not use javascript: or data: URLs");
+  return !lower.startsWith("javascript:")
+    && !lower.startsWith("data:")
+    && !value.startsWith("//");
+}, "href must not use javascript:, data:, or protocol-relative URLs");
 
 const requestConfirmationTargetBaseSchema = z.object({
   label: z.string().trim().min(1).max(120).nullable().optional(),

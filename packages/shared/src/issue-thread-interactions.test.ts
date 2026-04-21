@@ -91,4 +91,33 @@ describe("issue thread interaction schemas", () => {
       label: "Checklist v1",
     });
   });
+
+  it("rejects unsafe request_confirmation target hrefs", () => {
+    const base = {
+      kind: "request_confirmation",
+      payload: {
+        version: 1,
+        prompt: "Proceed?",
+        target: {
+          type: "custom",
+          key: "external-checklist",
+          revisionId: "checklist-v1",
+          label: "Checklist v1",
+        },
+      },
+    } as const;
+
+    for (const href of ["javascript:alert(1)", "data:text/html,hi", "//evil.example/path"]) {
+      expect(() => createIssueThreadInteractionSchema.parse({
+        ...base,
+        payload: {
+          ...base.payload,
+          target: {
+            ...base.payload.target,
+            href,
+          },
+        },
+      })).toThrow("href must not use javascript:, data:, or protocol-relative URLs");
+    }
+  });
 });

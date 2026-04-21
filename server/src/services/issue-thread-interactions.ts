@@ -754,7 +754,6 @@ export function issueThreadInteractionService(db: Db) {
       input: AcceptIssueThreadInteraction,
       actor: InteractionActor,
     ) => {
-      const data = acceptIssueThreadInteractionSchema.parse(input);
       const current = await db
         .select()
         .from(issueThreadInteractions)
@@ -775,7 +774,7 @@ export function issueThreadInteractionService(db: Db) {
       const interaction = hydrateInteraction(current) as SuggestTasksInteraction;
       const { selectedTasks, skippedClientKeys } = resolveSelectedSuggestedTasks({
         interaction,
-        selectedClientKeys: data.selectedClientKeys,
+        selectedClientKeys: input.selectedClientKeys,
       });
       const orderedTasks = buildTaskCreationOrder(selectedTasks);
       const explicitParentIds = [...new Set([
