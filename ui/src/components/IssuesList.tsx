@@ -1,5 +1,5 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { accessApi } from "../api/access";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
@@ -60,9 +60,11 @@ import { statusBadge } from "../lib/status-colors";
 import type { Issue, Project } from "@paperclipai/shared";
 const ISSUE_SEARCH_DEBOUNCE_MS = 250;
 const ISSUE_SEARCH_RESULT_LIMIT = 200;
+const ISSUE_BOARD_COLUMN_RESULT_LIMIT = 200;
 const INITIAL_ISSUE_ROW_RENDER_LIMIT = 150;
 const ISSUE_ROW_RENDER_BATCH_SIZE = 150;
 const ISSUE_ROW_RENDER_BATCH_DELAY_MS = 0;
+const boardIssueStatuses = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 
 /* ── View state ── */
 
@@ -394,6 +396,31 @@ export function IssuesList({
     enabled: !!selectedCompanyId && normalizedIssueSearch.length > 0,
     placeholderData: (previousData) => previousData,
   });
+  const boardIssueQueries = useQueries({
+    queries: boardIssueStatuses.map((status) => ({
+      queryKey: [
+        ...queryKeys.issues.list(selectedCompanyId ?? "__no-company__"),
+        "board-column",
+        status,
+        normalizedIssueSearch,
+        projectId ?? "__all-projects__",
+        searchFilters ?? {},
+        ISSUE_BOARD_COLUMN_RESULT_LIMIT,
+        enableRoutineVisibilityFilter ? "with-routine-executions" : "without-routine-executions",
+      ],
+      queryFn: () =>
+        issuesApi.list(selectedCompanyId!, {
+          ...searchFilters,
+          ...(normalizedIssueSearch.length > 0 ? { q: normalizedIssueSearch } : {}),
+          projectId,
+          status,
+          limit: ISSUE_BOARD_COLUMN_RESULT_LIMIT,
+          ...(enableRoutineVisibilityFilter ? { includeRoutineExecutions: true } : {}),
+        }),
+      enabled: !!selectedCompanyId && viewState.viewMode === "board",
+      placeholderData: (previousData: Issue[] | undefined) => previousData,
+    })),
+  });
   const { data: executionWorkspaces = [] } = useQuery({
     queryKey: selectedCompanyId
       ? queryKeys.executionWorkspaces.summaryList(selectedCompanyId)
@@ -570,11 +597,25 @@ export function IssuesList({
     return map;
   }, [issues]);
 
+  const boardIssues = useMemo(() => {
+    if (viewState.viewMode !== "board") return null;
+    const merged = new Map<string, Issue>();
+    let isPending = false;
+    for (const query of boardIssueQueries) {
+      isPending ||= query.isPending;
+      for (const issue of query.data ?? []) {
+        merged.set(issue.id, issue);
+      }
+    }
+    if (merged.size > 0) return [...merged.values()];
+    return isPending ? issues : [];
+  }, [boardIssueQueries, issues, viewState.viewMode]);
+
   const filtered = useMemo(() => {
-    const sourceIssues = normalizedIssueSearch.length > 0 ? searchedIssues : issues;
+    const sourceIssues = boardIssues ?? (normalizedIssueSearch.length > 0 ? searchedIssues : issues);
     const filteredByControls = applyIssueFilters(sourceIssues, viewState, currentUserId, enableRoutineVisibilityFilter);
     return sortIssues(filteredByControls, viewState);
-  }, [issues, searchedIssues, viewState, normalizedIssueSearch, currentUserId, enableRoutineVisibilityFilter]);
+  }, [boardIssues, issues, searchedIssues, viewState, normalizedIssueSearch, currentUserId, enableRoutineVisibilityFilter]);
 
   const { data: labels } = useQuery({
     queryKey: queryKeys.issues.labels(selectedCompanyId!),
