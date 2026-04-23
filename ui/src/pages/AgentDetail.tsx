@@ -1481,7 +1481,7 @@ function AgentOverview({
       {/* In-flight tasks — filter: status ∈ {todo, in_progress, blocked}; sort: priority DESC, updatedAt DESC; limit 7 */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">In-flight tasks</h3>
+          <h3 className="text-xs font-medium text-muted-foreground">In-flight tasks</h3>
           <Link
             to={`/issues?participantAgentId=${agentId}`}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -1555,7 +1555,7 @@ function CostsSection({
   if (!hasSummary && !hasTable) {
     return (
       <div className="border border-border rounded-none p-4 space-y-1">
-        <div className="text-xs text-muted-foreground">Costs — session</div>
+        <div className="text-xs font-medium text-muted-foreground">Costs — session</div>
         <p className="text-sm text-muted-foreground">No cost data yet.</p>
       </div>
     );
@@ -1565,7 +1565,7 @@ function CostsSection({
     <div className="border border-border rounded-none">
       {hasSummary && runtimeState && (
         <div className="p-4 space-y-1">
-          <div className="text-xs text-muted-foreground">Costs — session</div>
+          <div className="text-xs font-medium text-muted-foreground">Costs — session</div>
           <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 tabular-nums">
             <span className="text-sm font-semibold">{formatCents(runtimeState.totalCostCents)} cumulative</span>
             <span className="text-xs text-muted-foreground">·</span>
