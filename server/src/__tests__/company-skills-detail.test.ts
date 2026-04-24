@@ -56,6 +56,58 @@ describeEmbeddedPostgres("companySkillService.detail", () => {
     await tempDb?.cleanup();
   });
 
+  function createTrackedDb(baseDb: ReturnType<typeof createDb>) {
+    const fullSkillListReads = vi.fn();
+
+    const trackedDb = new Proxy(baseDb, {
+      get(target, prop, receiver) {
+        if (prop !== "select") {
+          const value = Reflect.get(target, prop, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+
+        return ((selection?: unknown) => {
+          const builder = selection === undefined ? target.select() : target.select(selection as never);
+
+          return new Proxy(builder as object, {
+            get(builderTarget, builderProp, builderReceiver) {
+              if (builderProp !== "from") {
+                const value = Reflect.get(builderTarget, builderProp, builderReceiver);
+                return typeof value === "function" ? value.bind(builderTarget) : value;
+              }
+
+              return (table: unknown) => {
+                const fromResult = (builderTarget as { from: (value: unknown) => unknown }).from(table);
+                if (selection === undefined && table === companySkills) {
+                  return new Proxy(fromResult as object, {
+                    get(fromTarget, fromProp, fromReceiver) {
+                      if (fromProp === "orderBy") {
+                        return (...orderArgs: unknown[]) => {
+                          fullSkillListReads();
+                          return (fromTarget as { orderBy: (...args: unknown[]) => unknown }).orderBy(...orderArgs);
+                        };
+                      }
+
+                      const value = Reflect.get(fromTarget, fromProp, fromReceiver);
+                      return typeof value === "function" ? value.bind(fromTarget) : value;
+                    },
+                  });
+                }
+
+                return fromResult;
+              };
+            },
+          });
+        }) as typeof target.select;
+      },
+    });
+
+    return {
+      db: trackedDb as typeof baseDb,
+      fullSkillListReads,
+    };
+  }
+
   it("reports attached agents without probing adapter runtime skill state", async () => {
     const companyId = randomUUID();
     const skillId = randomUUID();
@@ -111,5 +163,80 @@ describeEmbeddedPostgres("companySkillService.detail", () => {
         actualState: null,
       }),
     ]);
+  });
+
+  it("avoids the full company skill list query when resolving detail usage", async () => {
+    const companyId = randomUUID();
+    const skillId = randomUUID();
+    const skillKey = `company/${companyId}/reflection-coach`;
+    const skillDir = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-reflection-skill-"));
+    cleanupDirs.add(skillDir);
+    await fs.writeFile(path.join(skillDir, "SKILL.md"), "# Reflection Coach\n", "utf8");
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(companySkills).values([
+      {
+        id: skillId,
+        companyId,
+        key: skillKey,
+        slug: "reflection-coach",
+        name: "Reflection Coach",
+        description: null,
+        markdown: "# Reflection Coach\n",
+        sourceType: "local_path",
+        sourceLocator: skillDir,
+        trustLevel: "markdown_only",
+        compatibility: "compatible",
+        fileInventory: [{ path: "SKILL.md", kind: "skill" }],
+        metadata: { sourceKind: "local_path" },
+      },
+      {
+        id: randomUUID(),
+        companyId,
+        key: `company/${companyId}/large-reference-skill`,
+        slug: "large-reference-skill",
+        name: "Large Reference Skill",
+        description: null,
+        markdown: `# Large Reference Skill\n\n${"x".repeat(32_000)}`,
+        sourceType: "catalog",
+        sourceLocator: "paperclip://catalog/large-reference-skill",
+        trustLevel: "markdown_only",
+        compatibility: "compatible",
+        fileInventory: [{ path: "SKILL.md", kind: "skill" }],
+        metadata: { sourceKind: "catalog" },
+      },
+    ]);
+    await db.insert(agents).values({
+      id: randomUUID(),
+      companyId,
+      name: "Reviewer",
+      role: "engineer",
+      adapterType: "codex_local",
+      adapterConfig: {
+        paperclipSkillSync: {
+          desiredSkills: ["reflection-coach"],
+        },
+      },
+    });
+
+    const tracked = createTrackedDb(db);
+    const trackedSvc = companySkillService(tracked.db);
+    const detail = await Promise.race([
+      trackedSvc.detail(companyId, skillId),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("skill detail timed out")), 1_000)),
+    ]);
+
+    expect(detail?.usedByAgents).toEqual([
+      expect.objectContaining({
+        name: "Reviewer",
+        desired: true,
+      }),
+    ]);
+    expect(tracked.fullSkillListReads).not.toHaveBeenCalled();
   });
 });

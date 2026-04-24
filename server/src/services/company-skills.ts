@@ -70,6 +70,12 @@ type CompanySkillListRow = Pick<
   | "createdAt"
   | "updatedAt"
 >;
+type CompanySkillReferenceRow = Pick<
+  CompanySkillRow,
+  | "id"
+  | "key"
+  | "slug"
+>;
 type SkillReferenceTarget = Pick<CompanySkill, "id" | "key" | "slug">;
 type SkillSourceInfoTarget = Pick<
   CompanySkill,
@@ -1632,11 +1638,23 @@ export function companySkillService(db: Db) {
     return rows.map((row) => toCompanySkill(row));
   }
 
-  async function getById(id: string) {
+  async function listReferenceTargets(companyId: string): Promise<SkillReferenceTarget[]> {
+    const rows = await db
+      .select({
+        id: companySkills.id,
+        key: companySkills.key,
+        slug: companySkills.slug,
+      })
+      .from(companySkills)
+      .where(eq(companySkills.companyId, companyId));
+    return rows as CompanySkillReferenceRow[];
+  }
+
+  async function getById(companyId: string, id: string) {
     const row = await db
       .select()
       .from(companySkills)
-      .where(eq(companySkills.id, id))
+      .where(and(eq(companySkills.companyId, companyId), eq(companySkills.id, id)))
       .then((rows) => rows[0] ?? null);
     return row ? toCompanySkill(row) : null;
   }
@@ -1651,7 +1669,7 @@ export function companySkillService(db: Db) {
   }
 
   async function usage(companyId: string, key: string): Promise<CompanySkillUsageAgent[]> {
-    const skills = await listFull(companyId);
+    const skills = await listReferenceTargets(companyId);
     const agentRows = await agents.list(companyId);
     const desiredAgents = agentRows.filter((agent) => {
       const desiredSkills = resolveDesiredSkillKeys(skills, agent.adapterConfig as Record<string, unknown>);
@@ -1670,16 +1688,16 @@ export function companySkillService(db: Db) {
 
   async function detail(companyId: string, id: string): Promise<CompanySkillDetail | null> {
     await ensureSkillInventoryCurrent(companyId);
-    const skill = await getById(id);
-    if (!skill || skill.companyId !== companyId) return null;
+    const skill = await getById(companyId, id);
+    if (!skill) return null;
     const usedByAgents = await usage(companyId, skill.key);
     return enrichSkill(skill, usedByAgents.length, usedByAgents);
   }
 
   async function updateStatus(companyId: string, skillId: string): Promise<CompanySkillUpdateStatus | null> {
     await ensureSkillInventoryCurrent(companyId);
-    const skill = await getById(skillId);
-    if (!skill || skill.companyId !== companyId) return null;
+    const skill = await getById(companyId, skillId);
+    if (!skill) return null;
 
     if (skill.sourceType !== "github" && skill.sourceType !== "skills_sh") {
       return {
@@ -1722,8 +1740,8 @@ export function companySkillService(db: Db) {
 
   async function readFile(companyId: string, skillId: string, relativePath: string): Promise<CompanySkillFileDetail | null> {
     await ensureSkillInventoryCurrent(companyId);
-    const skill = await getById(skillId);
-    if (!skill || skill.companyId !== companyId) return null;
+    const skill = await getById(companyId, skillId);
+    if (!skill) return null;
 
     const normalizedPath = normalizePortablePath(relativePath || "SKILL.md");
     const fileEntry = skill.fileInventory.find((entry) => entry.path === normalizedPath);
@@ -1820,8 +1838,8 @@ export function companySkillService(db: Db) {
 
   async function updateFile(companyId: string, skillId: string, relativePath: string, content: string): Promise<CompanySkillFileDetail> {
     await ensureSkillInventoryCurrent(companyId);
-    const skill = await getById(skillId);
-    if (!skill || skill.companyId !== companyId) throw notFound("Skill not found");
+    const skill = await getById(companyId, skillId);
+    if (!skill) throw notFound("Skill not found");
 
     const source = deriveSkillSourceInfo(skill);
     if (!source.editable || skill.sourceType !== "local_path") {
@@ -1860,8 +1878,8 @@ export function companySkillService(db: Db) {
 
   async function installUpdate(companyId: string, skillId: string): Promise<CompanySkill | null> {
     await ensureSkillInventoryCurrent(companyId);
-    const skill = await getById(skillId);
-    if (!skill || skill.companyId !== companyId) return null;
+    const skill = await getById(companyId, skillId);
+    if (!skill) return null;
 
     const status = await updateStatus(companyId, skillId);
     if (!status?.supported) {
