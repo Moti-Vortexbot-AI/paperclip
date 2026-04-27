@@ -586,6 +586,48 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     return { companyId, agentId, runId, wakeupRequestId, issueId, rootIssueId };
   }
 
+  async function seedAssignedTodoNoRunFixture(input?: {
+    agentStatus?: "paused" | "idle" | "running";
+  }) {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const issueId = randomUUID();
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "CodexCoder",
+      role: "engineer",
+      status: input?.agentStatus ?? "idle",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Assigned todo work that never received a heartbeat",
+      status: "todo",
+      priority: "medium",
+      assigneeAgentId: agentId,
+      assigneeUserId: null,
+      issueNumber: 1,
+      identifier: `${issuePrefix}-1`,
+    });
+
+    return { companyId, agentId, issueId };
+  }
+
   async function expectStrandedRecoveryArtifacts(input: {
     companyId: string;
     agentId: string;
@@ -1173,6 +1215,105 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     });
   });
 
+  it("dispatches assigned todo work with no prior run as a normal assignment wake", async () => {
+    const { companyId, agentId, issueId } = await seedAssignedTodoNoRunFixture();
+    const heartbeat = heartbeatService(db);
+
+    const result = await heartbeat.reconcileStrandedAssignedIssues();
+    expect(result.assignmentDispatched).toBe(1);
+    expect(result.dispatchRequeued).toBe(0);
+    expect(result.continuationRequeued).toBe(0);
+    expect(result.escalated).toBe(0);
+    expect(result.issueIds).toEqual([issueId]);
+
+    const wakeups = await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.agentId, agentId));
+    expect(wakeups).toHaveLength(1);
+    expect(wakeups[0]).toMatchObject({
+      companyId,
+      agentId,
+      source: "assignment",
+      triggerDetail: "system",
+      reason: "issue_assigned",
+      payload: expect.objectContaining({
+        issueId,
+        mutation: "assigned_todo_liveness_dispatch",
+      }),
+    });
+
+    const runs = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.agentId, agentId));
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.retryOfRunId).toBeNull();
+    expect(runs[0]?.contextSnapshot).toMatchObject({
+      issueId,
+      taskId: issueId,
+      wakeReason: "issue_assigned",
+      source: "issue.assigned_todo_liveness_dispatch",
+    });
+    expect((runs[0]?.contextSnapshot as Record<string, unknown>)?.retryReason).toBeUndefined();
+
+    const issue = await db.select().from(issues).where(eq(issues.id, issueId)).then((rows) => rows[0] ?? null);
+    expect(issue?.status).toBe("todo");
+
+    const recoveryIssues = await db
+      .select()
+      .from(issues)
+      .where(and(eq(issues.companyId, companyId), eq(issues.originKind, "stranded_issue_recovery")));
+    expect(recoveryIssues).toHaveLength(0);
+    await expect(sourceBlockerIssueIds(companyId, issueId)).resolves.toEqual([]);
+
+    const comments = await db.select().from(issueComments).where(eq(issueComments.issueId, issueId));
+    expect(comments).toHaveLength(0);
+
+    if (runs[0]?.id) {
+      await waitForRunToSettle(heartbeat, runs[0].id);
+    }
+  });
+
+  it("does not duplicate initial assigned todo dispatch when a queued wake already exists", async () => {
+    const { companyId, agentId, issueId } = await seedAssignedTodoNoRunFixture();
+    await db.insert(agentWakeupRequests).values({
+      companyId,
+      agentId,
+      source: "assignment",
+      triggerDetail: "system",
+      reason: "issue_assigned",
+      payload: { issueId, mutation: "assigned_todo_liveness_dispatch" },
+      status: "queued",
+    });
+    const heartbeat = heartbeatService(db);
+
+    const result = await heartbeat.reconcileStrandedAssignedIssues();
+    expect(result.assignmentDispatched).toBe(0);
+    expect(result.dispatchRequeued).toBe(0);
+    expect(result.continuationRequeued).toBe(0);
+    expect(result.escalated).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(result.issueIds).toEqual([]);
+
+    const wakeups = await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.agentId, agentId));
+    expect(wakeups).toHaveLength(1);
+    const runs = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.agentId, agentId));
+    expect(runs).toHaveLength(0);
+  });
+
+  it("does not dispatch assigned todo work with no prior run when the agent is paused", async () => {
+    const { agentId, issueId } = await seedAssignedTodoNoRunFixture({ agentStatus: "paused" });
+    const heartbeat = heartbeatService(db);
+
+    const result = await heartbeat.reconcileStrandedAssignedIssues();
+    expect(result.assignmentDispatched).toBe(0);
+    expect(result.dispatchRequeued).toBe(0);
+    expect(result.continuationRequeued).toBe(0);
+    expect(result.escalated).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(result.issueIds).toEqual([]);
+
+    const issue = await db.select().from(issues).where(eq(issues.id, issueId)).then((rows) => rows[0] ?? null);
+    expect(issue?.status).toBe("todo");
+    const runs = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.agentId, agentId));
+    expect(runs).toHaveLength(0);
+  });
+
   it("re-enqueues assigned todo work when the last issue run died and no wake remains", async () => {
     const { agentId, issueId, runId } = await seedStrandedIssueFixture({
       status: "todo",
@@ -1181,6 +1322,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     const heartbeat = heartbeatService(db);
 
     const result = await heartbeat.reconcileStrandedAssignedIssues();
+    expect(result.assignmentDispatched).toBe(0);
     expect(result.dispatchRequeued).toBe(1);
     expect(result.continuationRequeued).toBe(0);
     expect(result.escalated).toBe(0);
