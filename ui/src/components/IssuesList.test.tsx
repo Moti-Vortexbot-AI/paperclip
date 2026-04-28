@@ -963,8 +963,8 @@ describe("IssuesList", () => {
     });
   });
 
-  it("renders the next local issue batch after scrolling near the bottom", async () => {
-    const manyIssues = Array.from({ length: 220 }, (_, index) =>
+  it("keeps rendering local issue batches while the user stays near the bottom", async () => {
+    const manyIssues = Array.from({ length: 420 }, (_, index) =>
       createIssue({
         id: `issue-${index + 1}`,
         identifier: `PAP-${index + 1}`,
@@ -993,8 +993,8 @@ describe("IssuesList", () => {
     });
 
     await waitForAssertion(() => {
-      expect(container.querySelectorAll('[data-testid="issue-row"]')).toHaveLength(220);
-      expect(container.textContent).not.toContain("Rendering 100 of 220 issues");
+      expect(container.querySelectorAll('[data-testid="issue-row"]')).toHaveLength(420);
+      expect(container.textContent).not.toContain("Rendering 250 of 420 issues");
     });
 
     act(() => {

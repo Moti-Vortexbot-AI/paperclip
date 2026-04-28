@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useCallback, useState } from "react";
 import { useLocation, useSearchParams } from "@/lib/router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
@@ -15,16 +15,14 @@ import { IssuesList } from "../components/IssuesList";
 import { CircleDot } from "lucide-react";
 
 const WORKSPACE_FILTER_ISSUE_LIMIT = 1000;
-const ISSUES_PAGE_INITIAL_LIMIT = 500;
-const ISSUES_PAGE_LIMIT_INCREMENT = 250;
-const ISSUES_PAGE_MAX_LIMIT = 1000;
+const ISSUES_PAGE_SIZE = 500;
 
-export function getNextIssuesPageLimit(currentLimit: number): number {
-  return Math.min(ISSUES_PAGE_MAX_LIMIT, currentLimit + ISSUES_PAGE_LIMIT_INCREMENT);
-}
-
-export function hasMoreIssuesToRequest(loadedIssueCount: number, currentLimit: number): boolean {
-  return loadedIssueCount >= currentLimit && currentLimit < ISSUES_PAGE_MAX_LIMIT;
+export function getNextIssuesPageOffset(
+  loadedPageSize: number,
+  currentOffset: number,
+  pageSize: number = ISSUES_PAGE_SIZE,
+): number | undefined {
+  return loadedPageSize >= pageSize ? currentOffset + pageSize : undefined;
 }
 
 export function buildIssuesSearchUrl(currentHref: string, search: string): string | null {
@@ -47,7 +45,6 @@ export function Issues() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const [issueListLimit, setIssueListLimit] = useState(ISSUES_PAGE_INITIAL_LIMIT);
 
   const initialSearch = searchParams.get("q") ?? "";
   const [syncedSearch, setSyncedSearch] = useState(initialSearch);
@@ -96,17 +93,20 @@ export function Issues() {
     setBreadcrumbs([{ label: "Issues" }]);
   }, [setBreadcrumbs]);
 
-  const effectiveIssueListLimit = workspaceIdFilter ? WORKSPACE_FILTER_ISSUE_LIMIT : issueListLimit;
+  const issuePageSize = workspaceIdFilter ? WORKSPACE_FILTER_ISSUE_LIMIT : ISSUES_PAGE_SIZE;
 
   useEffect(() => {
     setSyncedSearch(initialSearch);
   }, [initialSearch]);
 
-  useEffect(() => {
-    setIssueListLimit(ISSUES_PAGE_INITIAL_LIMIT);
-  }, [participantAgentId, workspaceIdFilter, selectedCompanyId, syncedSearch]);
-
-  const { data: issues, isLoading, isFetching, error } = useQuery({
+  const {
+    data: issuePages,
+    isLoading,
+    isFetchingNextPage,
+    error,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
     queryKey: [
       ...queryKeys.issues.list(selectedCompanyId!),
       "participant-agent",
@@ -114,26 +114,30 @@ export function Issues() {
       "workspace",
       workspaceIdFilter ?? "__all__",
       "with-routine-executions",
-      "limit",
-      effectiveIssueListLimit,
+      "infinite",
+      issuePageSize,
     ],
-    queryFn: () => issuesApi.list(selectedCompanyId!, {
+    queryFn: ({ pageParam }) => issuesApi.list(selectedCompanyId!, {
       participantAgentId,
       workspaceId: workspaceIdFilter,
       includeRoutineExecutions: true,
-      limit: effectiveIssueListLimit,
+      limit: issuePageSize,
+      offset: pageParam,
     }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      getNextIssuesPageOffset(lastPage.length, lastPageParam, issuePageSize),
     enabled: !!selectedCompanyId,
     placeholderData: (previousData) => previousData,
   });
 
-  const hasMoreServerIssues = !workspaceIdFilter
-    && syncedSearch.trim().length === 0
-    && hasMoreIssuesToRequest(issues?.length ?? 0, issueListLimit);
+  const issues = useMemo(() => issuePages?.pages.flat() ?? [], [issuePages]);
+  const hasMoreServerIssues = syncedSearch.trim().length === 0
+    && hasNextPage === true;
   const loadMoreServerIssues = useCallback(() => {
-    if (workspaceIdFilter) return;
-    setIssueListLimit((current) => getNextIssuesPageLimit(current));
-  }, [workspaceIdFilter]);
+    if (!hasNextPage || isFetchingNextPage) return;
+    void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const updateIssue = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
@@ -151,7 +155,7 @@ export function Issues() {
     <IssuesList
       issues={issues ?? []}
       isLoading={isLoading}
-      isLoadingMoreIssues={isFetching && !isLoading}
+      isLoadingMoreIssues={isFetchingNextPage}
       error={error as Error | null}
       agents={agents}
       projects={projects}

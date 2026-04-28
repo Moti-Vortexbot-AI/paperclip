@@ -112,6 +112,7 @@ export interface IssueFilters {
   includeBlockedBy?: boolean;
   q?: string;
   limit?: number;
+  offset?: number;
 }
 
 type IssueRow = typeof issues.$inferSelect;
@@ -2083,6 +2084,9 @@ export function issueService(db: Db) {
       const limit = typeof filters?.limit === "number" && Number.isFinite(filters.limit)
         ? Math.max(1, Math.floor(filters.limit))
         : undefined;
+      const offset = typeof filters?.offset === "number" && Number.isFinite(filters.offset)
+        ? Math.max(0, Math.floor(filters.offset))
+        : 0;
       const touchedByUserId = filters?.touchedByUserId?.trim() || undefined;
       const inboxArchivedByUserId = filters?.inboxArchivedByUserId?.trim() || undefined;
       const unreadForUserId = filters?.unreadForUserId?.trim() || undefined;
@@ -2205,8 +2209,12 @@ export function issueService(db: Db) {
           asc(priorityOrder),
           desc(canonicalLastActivityAt),
           desc(issues.updatedAt),
+          desc(issues.id),
         );
-      const rows = (limit === undefined ? await baseQuery : await baseQuery.limit(limit)).map((row) => ({
+      const pageQuery = offset > 0
+        ? (limit === undefined ? baseQuery.offset(offset) : baseQuery.limit(limit).offset(offset))
+        : (limit === undefined ? baseQuery : baseQuery.limit(limit));
+      const rows = (await pageQuery).map((row) => ({
         ...row,
         description: decodeDatabaseTextPreview(row.description, ISSUE_LIST_DESCRIPTION_MAX_CHARS),
       }));

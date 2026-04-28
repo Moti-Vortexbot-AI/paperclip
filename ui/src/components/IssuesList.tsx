@@ -1040,7 +1040,7 @@ export function IssuesList({
       window.removeEventListener("resize", checkScrollPosition);
       if (animationFrameId !== null) window.cancelAnimationFrame(animationFrameId);
     };
-  }, [canLoadMoreIssues, loadMoreIssueRows]);
+  }, [canLoadMoreIssues, loadMoreIssueRows, renderedIssueRowLimit]);
 
   const newIssueDefaults = useCallback((groupKey?: string) => {
     const defaults: Record<string, unknown> = { ...(baseCreateIssueDefaults ?? {}) };

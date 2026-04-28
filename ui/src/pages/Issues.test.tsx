@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildIssuesSearchUrl, getNextIssuesPageLimit, hasMoreIssuesToRequest } from "./Issues";
+import { buildIssuesSearchUrl, getNextIssuesPageOffset } from "./Issues";
 
 describe("buildIssuesSearchUrl", () => {
   it("preserves trailing spaces in the synced search param", () => {
@@ -16,15 +16,14 @@ describe("buildIssuesSearchUrl", () => {
 });
 
 describe("issues page pagination helpers", () => {
-  it("increments issue list limits up to the server cap", () => {
-    expect(getNextIssuesPageLimit(500)).toBe(750);
-    expect(getNextIssuesPageLimit(750)).toBe(1000);
-    expect(getNextIssuesPageLimit(1000)).toBe(1000);
+  it("advances to the next offset when the current page is full", () => {
+    expect(getNextIssuesPageOffset(500, 0)).toBe(500);
+    expect(getNextIssuesPageOffset(500, 500)).toBe(1000);
+    expect(getNextIssuesPageOffset(1000, 2000, 1000)).toBe(3000);
   });
 
-  it("requests another issue page only when the current server limit is full", () => {
-    expect(hasMoreIssuesToRequest(499, 500)).toBe(false);
-    expect(hasMoreIssuesToRequest(500, 500)).toBe(true);
-    expect(hasMoreIssuesToRequest(1000, 1000)).toBe(false);
+  it("stops requesting issue pages when the current page is partial", () => {
+    expect(getNextIssuesPageOffset(499, 0)).toBeUndefined();
+    expect(getNextIssuesPageOffset(999, 2000, 1000)).toBeUndefined();
   });
 });
