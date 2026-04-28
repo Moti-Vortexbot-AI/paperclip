@@ -77,6 +77,7 @@ import { ImageGalleryModal } from "../components/ImageGalleryModal";
 import { ScrollToBottom } from "../components/ScrollToBottom";
 import { StatusIcon } from "../components/StatusIcon";
 import { PriorityIcon } from "../components/PriorityIcon";
+import { ProductivityReviewBadge } from "../components/ProductivityReviewBadge";
 import { Identity } from "../components/Identity";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
@@ -108,6 +109,7 @@ import {
   Check,
   ChevronRight,
   Copy,
+  Eye,
   EyeOff,
   Hexagon,
   ListTree,
@@ -2905,6 +2907,20 @@ export function IssueDetail() {
               Routine
             </Link>
           )}
+
+          {issue.productivityReview ? (
+            <ProductivityReviewBadge review={issue.productivityReview} />
+          ) : null}
+
+          {issue.originKind === "issue_productivity_review" ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300 shrink-0"
+              title="This task is a productivity review."
+            >
+              <Eye className="h-3 w-3" />
+              Productivity review
+            </span>
+          ) : null}
 
           {issue.projectId ? (
             <Link
