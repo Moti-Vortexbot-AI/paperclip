@@ -128,6 +128,8 @@ interface IssueChatMessageContext {
     options?: { allowSharing?: boolean; reason?: string },
   ) => Promise<void>;
   onStopRun?: (runId: string) => Promise<void>;
+  stopRunLabel?: string;
+  stoppingRunLabel?: string;
   onInterruptQueued?: (runId: string) => Promise<void>;
   onCancelQueued?: (commentId: string) => void;
   onImageClick?: (src: string) => void;
@@ -276,6 +278,8 @@ interface IssueChatThreadProps {
   onAdd: (body: string, reopen?: boolean, reassignment?: CommentReassignment) => Promise<void>;
   onCancelRun?: () => Promise<void>;
   onStopRun?: (runId: string) => Promise<void>;
+  stopRunLabel?: string;
+  stoppingRunLabel?: string;
   imageUploadHandler?: (file: File) => Promise<string>;
   onAttachImage?: (file: File) => Promise<IssueAttachment | void>;
   draftKey?: string;
@@ -1338,6 +1342,8 @@ function IssueChatAssistantMessage({
     onVote,
     agentMap,
     onStopRun,
+    stopRunLabel = "Stop run",
+    stoppingRunLabel = "Stopping...",
   } = useContext(IssueChatCtx);
   const custom = message.metadata.custom as Record<string, unknown>;
   const anchorId = typeof custom.anchorId === "string" ? custom.anchorId : undefined;
@@ -1531,13 +1537,21 @@ function IssueChatAssistantMessage({
                     {canStopRun && onStopRun && runId ? (
                       <DropdownMenuItem
                         disabled={isStoppingRun}
-                        className="text-red-700 focus:text-red-800 dark:text-red-300 dark:focus:text-red-200"
+                        className={cn(
+                          stopRunLabel.toLowerCase().includes("pause")
+                            ? "text-amber-700 focus:text-amber-800 dark:text-amber-300 dark:focus:text-amber-200"
+                            : "text-red-700 focus:text-red-800 dark:text-red-300 dark:focus:text-red-200",
+                        )}
                         onSelect={() => {
                           void onStopRun(runId);
                         }}
                       >
-                        <Square className="mr-2 h-3.5 w-3.5 fill-current" />
-                        {isStoppingRun ? "Stopping…" : "Stop run"}
+                        {stopRunLabel.toLowerCase().includes("pause") ? (
+                          <PauseCircle className="mr-2 h-3.5 w-3.5" />
+                        ) : (
+                          <Square className="mr-2 h-3.5 w-3.5 fill-current" />
+                        )}
+                        {isStoppingRun ? stoppingRunLabel : stopRunLabel}
                       </DropdownMenuItem>
                     ) : null}
                     {runHref ? (
@@ -2954,6 +2968,8 @@ export function IssueChatThread({
   onAdd,
   onCancelRun,
   onStopRun,
+  stopRunLabel,
+  stoppingRunLabel,
   imageUploadHandler,
   onAttachImage,
   draftKey,
@@ -3391,6 +3407,8 @@ export function IssueChatThread({
       userProfileMap,
       onVote: stableOnVote,
       onStopRun: stableOnStopRun,
+      stopRunLabel,
+      stoppingRunLabel,
       onInterruptQueued: stableOnInterruptQueued,
       onCancelQueued: stableOnCancelQueued,
       onImageClick: stableOnImageClick,
@@ -3407,6 +3425,8 @@ export function IssueChatThread({
       userProfileMap,
       stableOnVote,
       stableOnStopRun,
+      stopRunLabel,
+      stoppingRunLabel,
       stableOnInterruptQueued,
       stableOnCancelQueued,
       stableOnImageClick,

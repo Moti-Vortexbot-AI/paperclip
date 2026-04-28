@@ -279,12 +279,18 @@ describe("IssueRunLedger", () => {
           resultJson: { stopReason: "budget_paused" },
           createdAt: "2026-04-18T19:56:00.000Z",
         }),
+        createRun({
+          runId: "run-paused",
+          resultJson: { stopReason: "paused" },
+          createdAt: "2026-04-18T19:55:00.000Z",
+        }),
       ],
     });
 
     expect(container.textContent).toContain("timeout (30s timeout)");
     expect(container.textContent).toContain("cancelled");
     expect(container.textContent).toContain("budget paused");
+    expect(container.textContent).toContain("paused by board");
   });
 
   it("surfaces active and completed child issue summaries", () => {
