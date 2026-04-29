@@ -291,6 +291,106 @@ const coveredBlockedIssue = createIssue({
   updatedAt: new Date("2026-04-24T13:40:00.000Z"),
 });
 
+const dispositionRowFixtures = [
+  {
+    caption: "Live · active run — emerald",
+    issue: createIssue({
+      id: "issue-live-row",
+      identifier: "PAP-2820",
+      issueNumber: 2820,
+      title: "Phase 4 wiring · active execution",
+      status: "in_progress",
+      priority: "medium",
+      executionDisposition: { kind: "live", path: "active_run" },
+      lastActivityAt: new Date("2026-04-29T13:40:00.000Z"),
+      updatedAt: new Date("2026-04-29T13:40:00.000Z"),
+    }),
+  },
+  {
+    caption: "Resuming · 1/2 — muted indigo, attempt counter inline",
+    issue: createIssue({
+      id: "issue-resuming-row",
+      identifier: "PAP-2821",
+      issueNumber: 2821,
+      title: "Continuation queued after transient failure",
+      status: "in_progress",
+      priority: "medium",
+      executionDisposition: { kind: "agent_continuable", continuationAttempt: 1, maxAttempts: 2 },
+      lastActivityAt: new Date("2026-04-29T13:42:00.000Z"),
+      updatedAt: new Date("2026-04-29T13:42:00.000Z"),
+    }),
+  },
+  {
+    caption: "Needs board — rose, owner-specific label",
+    issue: createIssue({
+      id: "issue-needs-board-row",
+      identifier: "PAP-2823",
+      issueNumber: 2823,
+      title: "Spend approval blocked on board response",
+      status: "in_review",
+      priority: "high",
+      executionDisposition: { kind: "human_escalation_required", owner: "board" },
+      lastActivityAt: new Date("2026-04-29T13:44:00.000Z"),
+      updatedAt: new Date("2026-04-29T13:44:00.000Z"),
+    }),
+  },
+  {
+    caption: "Needs manager — rose, owner-specific label",
+    issue: createIssue({
+      id: "issue-needs-manager-row",
+      identifier: "PAP-2824",
+      issueNumber: 2824,
+      title: "Specialty handoff blocked — manager must act",
+      status: "in_review",
+      priority: "high",
+      executionDisposition: { kind: "human_escalation_required", owner: "manager" },
+      lastActivityAt: new Date("2026-04-29T13:45:00.000Z"),
+      updatedAt: new Date("2026-04-29T13:45:00.000Z"),
+    }),
+  },
+  {
+    caption: "Stalled — solid rose-600 fill, the canary outlier",
+    issue: createIssue({
+      id: "issue-stalled-row",
+      identifier: "PAP-2825",
+      issueNumber: 2825,
+      title: "Review without action path — operator must intervene",
+      status: "in_review",
+      priority: "high",
+      executionDisposition: {
+        kind: "invalid",
+        reason: "in_review_without_action_path",
+        suggestedCorrection: "Add participant or move out of review",
+      },
+      lastActivityAt: new Date("2026-04-29T13:50:00.000Z"),
+      updatedAt: new Date("2026-04-29T13:50:00.000Z"),
+    }),
+  },
+];
+
+function DispositionRowSurface({ mode, size }: { mode: "light" | "dark"; size: "desktop" | "mobile" }) {
+  const isDark = mode === "dark";
+  const isMobile = size === "mobile";
+  return (
+    <div className={isDark ? "dark" : undefined}>
+      <div className="rounded-lg border border-border bg-background text-foreground">
+        <div className="border-b border-border px-3 py-2 text-xs font-medium text-muted-foreground">
+          {size} · {mode}
+        </div>
+        <div className={isMobile ? "max-w-[358px]" : "min-w-[620px]"}>
+          {dispositionRowFixtures.map((fixture) => (
+            <IssueRow
+              key={fixture.issue.id}
+              issue={fixture.issue}
+              mobileMeta={<StatusBadge status={fixture.issue.status} />}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function summaryBlocker(
   partial: Partial<IssueRelationIssueSummary> & Pick<IssueRelationIssueSummary, "id" | "title" | "status">,
 ): IssueRelationIssueSummary {
@@ -868,21 +968,31 @@ function StatusLanguage() {
             {[
               { label: "Live · active run", disposition: { kind: "live", path: "active_run" } as const },
               { label: "Live · queued wake", disposition: { kind: "live", path: "queued_wake" } as const },
-              { label: "Ready · dispatchable", disposition: { kind: "dispatchable", wakeTarget: "agent-1" } as const },
               { label: "Waiting · interaction", disposition: { kind: "waiting", path: "interaction" } as const },
               { label: "Waiting · approval", disposition: { kind: "waiting", path: "approval" } as const },
               { label: "Waiting · participant", disposition: { kind: "waiting", path: "participant" } as const },
               { label: "Blocked · chain", disposition: { kind: "waiting", path: "blocker_chain" } as const },
+              { label: "Resuming · 1/2", disposition: { kind: "agent_continuable", continuationAttempt: 1, maxAttempts: 2 } as const },
+              { label: "Resuming · 2/2", disposition: { kind: "agent_continuable", continuationAttempt: 2, maxAttempts: 2 } as const },
               { label: "Recovery · continuation", disposition: { kind: "recoverable_by_control_plane", recovery: "continuation" } as const },
-              { label: "Continuable · 1/2", disposition: { kind: "agent_continuable", continuationAttempt: 1, maxAttempts: 2 } as const },
-              { label: "Needs manager", disposition: { kind: "human_escalation_required", owner: "manager" } as const },
               { label: "Needs board", disposition: { kind: "human_escalation_required", owner: "board" } as const },
+              { label: "Needs manager", disposition: { kind: "human_escalation_required", owner: "manager" } as const },
+              { label: "Needs owner", disposition: { kind: "human_escalation_required", owner: "recovery_owner" } as const },
+              { label: "Needs external", disposition: { kind: "human_escalation_required", owner: "external" } as const },
               {
                 label: "Stalled review",
                 disposition: {
                   kind: "invalid",
                   reason: "in_review_without_action_path",
                   suggestedCorrection: "Add participant or move out of review",
+                } as const,
+              },
+              {
+                label: "Stalled chain",
+                disposition: {
+                  kind: "invalid",
+                  reason: "blocked_without_action_path",
+                  suggestedCorrection: "Resolve or remove the orphan blocker",
                 } as const,
               },
             ].map((item) => (
@@ -895,6 +1005,27 @@ function StatusLanguage() {
               </div>
             ))}
           </div>
+          <p className="mt-3 max-w-3xl text-xs text-muted-foreground">
+            Stalled uses a solid rose-600 fill so it stands out against the rose family at scan distance.
+            Resuming sits in muted indigo (clearly off the rose alarm family) and surfaces the
+            continuation counter on the visible badge. Each escalation owner gets its own visible
+            label so the board can see who is blocking work without hovering. Dispatchable is
+            intentionally invisible — it's a transient bookkeeping signal, not something to scan for.
+          </p>
+        </Section>
+
+        <Section eyebrow="Execution disposition" title="IssueRow with disposition badge inline">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <DispositionRowSurface mode="light" size="desktop" />
+            <DispositionRowSurface mode="dark" size="desktop" />
+            <DispositionRowSurface mode="light" size="mobile" />
+            <DispositionRowSurface mode="dark" size="mobile" />
+          </div>
+          <p className="mt-3 max-w-3xl text-xs text-muted-foreground">
+            Verifies the badge in production layout. Stalled is visually distinct from any rose-family
+            row at full-page scan, Resuming reads as benign muted indigo with the attempt counter,
+            and Needs board / Needs manager are independently legible without hover.
+          </p>
         </Section>
 
         <Section eyebrow="Productivity review" title="Yellow accountability state on source issues">

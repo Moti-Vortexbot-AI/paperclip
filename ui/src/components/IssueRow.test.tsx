@@ -291,6 +291,32 @@ describe("IssueRow", () => {
     act(() => root2.unmount());
   });
 
+  it("does not render a disposition badge for the dispatchable bookkeeping signal", () => {
+    const root = createRoot(container);
+    const issue = createIssue({
+      executionDisposition: { kind: "dispatchable", wakeTarget: "agent-1" },
+    });
+    act(() => {
+      root.render(<IssueRow issue={issue} />);
+    });
+    expect(container.querySelector("[data-execution-disposition-kind]")).toBeNull();
+    act(() => root.unmount());
+  });
+
+  it("renders the resuming badge with the attempt counter on the visible label", () => {
+    const root = createRoot(container);
+    const issue = createIssue({
+      executionDisposition: { kind: "agent_continuable", continuationAttempt: 1, maxAttempts: 2 },
+    });
+    act(() => {
+      root.render(<IssueRow issue={issue} />);
+    });
+    const badge = container.querySelector("[data-execution-disposition-kind]");
+    expect(badge?.getAttribute("data-execution-disposition-category")).toBe("resuming");
+    expect(badge?.textContent).toContain("Resuming · 1/2");
+    act(() => root.unmount());
+  });
+
   it("hides the disposition badge when the explicit waiting pill already conveys the same signal", () => {
     const root = createRoot(container);
     const issue = createIssue({
