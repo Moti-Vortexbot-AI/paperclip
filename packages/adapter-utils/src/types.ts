@@ -447,6 +447,14 @@ export interface CreateConfigValues {
   promptTemplate: string;
   model: string;
   thinkingEffort: string;
+  /**
+   * Optional cheap model profile config for new agents on adapters that
+   * support model profiles. Persisted under
+   * `runtimeConfig.modelProfiles.cheap.adapterConfig`, never on the primary
+   * `adapterConfig`.
+   */
+  cheapModel?: string;
+  cheapModelEnabled?: boolean;
   chrome: boolean;
   dangerouslySkipPermissions: boolean;
   search: boolean;
