@@ -3,9 +3,15 @@
 import { pathToFileURL } from "node:url";
 
 const CANARY_VERSION_RE = /-canary\.\d+$/;
+const EXIT_RETRIABLE_FAILURE = 1;
+const EXIT_NON_RETRIABLE_FAILURE = 2;
 
 export function isCanaryVersion(version) {
   return CANARY_VERSION_RE.test(version);
+}
+
+function createExitError(message, exitCode = EXIT_RETRIABLE_FAILURE) {
+  return Object.assign(new Error(message), { exitCode });
 }
 
 function usage() {
@@ -55,28 +61,28 @@ function parseArgs(argv) {
         usage();
         process.exit(0);
       default:
-        throw new Error(`unexpected argument: ${arg}`);
+        throw createExitError(`unexpected argument: ${arg}`, EXIT_NON_RETRIABLE_FAILURE);
     }
   }
 
   if (options.channel !== "canary" && options.channel !== "stable") {
-    throw new Error("--channel must be canary or stable");
+    throw createExitError("--channel must be canary or stable", EXIT_NON_RETRIABLE_FAILURE);
   }
 
   if (!options.distTag) {
-    throw new Error("--dist-tag is required");
+    throw createExitError("--dist-tag is required", EXIT_NON_RETRIABLE_FAILURE);
   }
 
   if (!options.targetVersion) {
-    throw new Error("--target-version is required");
+    throw createExitError("--target-version is required", EXIT_NON_RETRIABLE_FAILURE);
   }
 
   if (options.packages.length === 0 || options.packages.some((name) => !name)) {
-    throw new Error("at least one non-empty --package value is required");
+    throw createExitError("at least one non-empty --package value is required", EXIT_NON_RETRIABLE_FAILURE);
   }
 
   if (options.allowCanaryLatest && options.channel !== "canary") {
-    throw new Error("--allow-canary-latest only applies to canary releases");
+    throw createExitError("--allow-canary-latest only applies to canary releases", EXIT_NON_RETRIABLE_FAILURE);
   }
 
   return options;
@@ -191,11 +197,14 @@ export function collectInternalDependencyProblems(
         packageDocsByName.get(dependencyName),
         packageManifestsByKey,
       );
+      const dependencyLookupKey = createManifestLookupKey(dependencyName, dependencyVersion);
 
       if (!dependencyManifest) {
         const dependencyDoc = packageDocsByName.get(dependencyName);
-        if (!dependencyDoc && !packageManifestsByKey.has(createManifestLookupKey(dependencyName, dependencyVersion))) {
-          problems.push(`${sectionName} requires ${dependencyName}@${dependencyVersion}, but that package is not published`);
+        if (!dependencyDoc && !packageManifestsByKey.has(dependencyLookupKey)) {
+          problems.push(
+            `${sectionName} requires ${dependencyName}@${dependencyVersion}, but npm publication metadata was not fetched for that dependency`,
+          );
           continue;
         }
 
@@ -207,6 +216,10 @@ export function collectInternalDependencyProblems(
   }
 
   return problems;
+}
+
+function isNonRetriableProblem(problem) {
+  return problem.includes("latest dist-tag still resolves to canary");
 }
 
 function requireManifest(packageName, version, packageDoc, packageManifestsByKey, problems) {
@@ -403,7 +416,10 @@ async function main() {
   }
 
   if (problems.length > 0) {
-    throw new Error(`npm registry verification failed for ${problems.length} problem(s)`);
+    const exitCode = problems.some(isNonRetriableProblem)
+      ? EXIT_NON_RETRIABLE_FAILURE
+      : EXIT_RETRIABLE_FAILURE;
+    throw createExitError(`npm registry verification failed for ${problems.length} problem(s)`, exitCode);
   }
 }
 
@@ -412,6 +428,6 @@ const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process
 if (isDirectRun) {
   main().catch((error) => {
     process.stderr.write(`Error: ${error.message}\n`);
-    process.exit(1);
+    process.exit(error.exitCode ?? EXIT_RETRIABLE_FAILURE);
   });
 }

@@ -78,6 +78,21 @@ test("collectInternalDependencyProblems ignores peer dependency range specifiers
   );
 });
 
+test("collectInternalDependencyProblems reports unfetched transitive dependency metadata neutrally", () => {
+  const manifest = {
+    optionalDependencies: {
+      "@paperclipai/browser": "2026.430.0-canary.0",
+    },
+  };
+
+  assert.deepEqual(
+    collectInternalDependencyProblems(manifest, new Map()),
+    [
+      "optionalDependencies requires @paperclipai/browser@2026.430.0-canary.0, but npm publication metadata was not fetched for that dependency",
+    ],
+  );
+});
+
 test("verifyPackageRegistryState tolerates a stale root versions map when dist-tags and direct manifests are correct", () => {
   const packageDocsByName = new Map([
     [
