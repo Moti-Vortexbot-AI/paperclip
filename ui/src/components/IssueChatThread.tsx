@@ -3406,14 +3406,31 @@ export function IssueChatThread({
 
     const resolveScrollContainer = (): HTMLElement | null =>
       (document.getElementById("main-content") as HTMLElement | null);
+    const cancelTarget = resolveScrollContainer() ?? window;
 
     let lastScrollTop = -1;
     let lastScrollHeight = -1;
     let stableTicks = 0;
+    let cancelled = false;
+
+    const cancel = () => {
+      cancelled = true;
+    };
+
+    const finish = () => {
+      cancelTarget.removeEventListener("wheel", cancel);
+      cancelTarget.removeEventListener("touchstart", cancel);
+    };
+
+    cancelTarget.addEventListener("wheel", cancel, { once: true, passive: true });
+    cancelTarget.addEventListener("touchstart", cancel, { once: true, passive: true });
 
     const tick = () => {
       const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
-      if (now - startedAt > MAX_DURATION_MS) return;
+      if (cancelled || now - startedAt > MAX_DURATION_MS) {
+        finish();
+        return;
+      }
 
       const el = document.getElementById(latestCommentAnchor);
       if (!el) {
@@ -3445,7 +3462,10 @@ export function IssueChatThread({
       const atBottom = Math.abs(offBottom) <= TOLERANCE_PX;
       if (scrollStable && heightStable && atBottom) {
         stableTicks += 1;
-        if (stableTicks >= 3) return;
+        if (stableTicks >= 3) {
+          finish();
+          return;
+        }
       } else {
         stableTicks = 0;
       }

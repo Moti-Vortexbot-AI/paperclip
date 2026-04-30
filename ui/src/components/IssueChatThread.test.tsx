@@ -601,6 +601,71 @@ describe("IssueChatThread", () => {
     scrollHost.remove();
   });
 
+  it("cancels jump-to-latest settling when the user scrolls manually", () => {
+    vi.useFakeTimers();
+    container.remove();
+    const scrollHost = document.createElement("main");
+    scrollHost.id = "main-content";
+    scrollHost.style.overflowY = "auto";
+    scrollHost.style.overflow = "auto";
+    scrollHost.style.height = "640px";
+    document.body.appendChild(scrollHost);
+    container = document.createElement("div");
+    scrollHost.appendChild(container);
+
+    const elementScrollToMock = vi.fn();
+    scrollHost.scrollTo = elementScrollToMock as unknown as typeof scrollHost.scrollTo;
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    const scrollIntoViewMock = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoViewMock as unknown as typeof Element.prototype.scrollIntoView;
+
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <IssueChatThread
+            comments={issueChatLongThreadComments}
+            linkedRuns={issueChatLongThreadLinkedRuns}
+            timelineEvents={issueChatLongThreadEvents}
+            liveRuns={[]}
+            agentMap={issueChatLongThreadAgentMap}
+            currentUserId="user-board"
+            onAdd={async () => {}}
+            enableLiveTranscriptPolling={false}
+            transcriptsByRunId={issueChatLongThreadTranscriptsByRunId}
+            hasOutputForRun={(runId) => issueChatLongThreadTranscriptsByRunId.has(runId)}
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    const jump = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Jump to latest",
+    ) as HTMLButtonElement | undefined;
+    expect(jump).toBeDefined();
+
+    act(() => {
+      jump?.click();
+    });
+
+    expect(elementScrollToMock.mock.calls.some(([arg]) => hasSmoothScrollBehavior(arg))).toBe(true);
+    const scrollCallsAfterClick = elementScrollToMock.mock.calls.length;
+
+    act(() => {
+      scrollHost.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(elementScrollToMock).toHaveBeenCalledTimes(scrollCallsAfterClick);
+    expect(scrollIntoViewMock).not.toHaveBeenCalled();
+
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+    act(() => {
+      root.unmount();
+    });
+    scrollHost.remove();
+  });
+
   // Regression for PAP-2672: when the merged feed ends with a non-comment row
   // (run/timeline/embedded output) we still want Jump to latest to land on the
   // last comment, not whichever activity row sorts last.

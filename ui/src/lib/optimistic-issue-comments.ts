@@ -167,7 +167,7 @@ export async function loadRemainingIssueCommentPages<T extends { id: string }>(p
   const pages = (params.pages ?? []).map((page) => [...page]);
   const pageParams = params.pageParams
     ? [...params.pageParams].slice(0, pages.length)
-    : pages.map((_, index) => index === 0 ? null : null);
+    : pages.map(() => null);
 
   while (pageParams.length < pages.length) {
     pageParams.push(null);
