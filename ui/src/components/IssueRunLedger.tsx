@@ -475,7 +475,9 @@ export function IssueRunLedgerContent({
         items.push({
           kind: "activity",
           id: event.id,
-          timestamp: String(event.createdAt),
+          timestamp: event.createdAt instanceof Date
+            ? event.createdAt.toISOString()
+            : String(event.createdAt),
           event,
         });
       }
