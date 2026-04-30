@@ -1837,6 +1837,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
           createdByAgentId: issues.createdByAgentId,
           createdByUserId: issues.createdByUserId,
           executionState: issues.executionState,
+          monitorNextCheckAt: issues.monitorNextCheckAt,
         })
         .from(issues)
         .where(

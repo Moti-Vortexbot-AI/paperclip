@@ -233,6 +233,8 @@ export function IssueProperties({
   const [newLabelColor, setNewLabelColor] = useState("#6366f1");
   const [monitorAtInput, setMonitorAtInput] = useState(() => toDateTimeLocalValue(issue.executionPolicy?.monitor?.nextCheckAt));
   const [monitorNotesInput, setMonitorNotesInput] = useState(issue.executionPolicy?.monitor?.notes ?? "");
+  const [monitorServiceInput, setMonitorServiceInput] = useState(issue.executionPolicy?.monitor?.serviceName ?? "");
+  const [monitorExternalRefInput, setMonitorExternalRefInput] = useState(issue.executionPolicy?.monitor?.externalRef ?? "");
 
   const { data: session } = useQuery({
     queryKey: queryKeys.auth.session,
@@ -472,7 +474,14 @@ export function IssueProperties({
   useEffect(() => {
     setMonitorAtInput(toDateTimeLocalValue(issue.executionPolicy?.monitor?.nextCheckAt));
     setMonitorNotesInput(issue.executionPolicy?.monitor?.notes ?? "");
-  }, [issue.executionPolicy?.monitor?.nextCheckAt, issue.executionPolicy?.monitor?.notes]);
+    setMonitorServiceInput(issue.executionPolicy?.monitor?.serviceName ?? "");
+    setMonitorExternalRefInput(issue.executionPolicy?.monitor?.externalRef ?? "");
+  }, [
+    issue.executionPolicy?.monitor?.nextCheckAt,
+    issue.executionPolicy?.monitor?.notes,
+    issue.executionPolicy?.monitor?.serviceName,
+    issue.executionPolicy?.monitor?.externalRef,
+  ]);
 
   const updateMonitor = (nextMonitor: Issue["executionPolicy"] extends infer T
     ? T extends { monitor?: infer M | null } | null | undefined
@@ -501,10 +510,15 @@ export function IssueProperties({
     if (!monitorAtInput) return;
     const nextCheckAt = new Date(monitorAtInput);
     if (Number.isNaN(nextCheckAt.getTime())) return;
+    const serviceName = monitorServiceInput.trim() || null;
+    const externalRef = monitorExternalRefInput.trim() || null;
     updateMonitor({
       nextCheckAt: nextCheckAt.toISOString(),
       notes: monitorNotesInput.trim() || null,
       scheduledBy: issue.executionPolicy?.monitor?.scheduledBy ?? "assignee",
+      kind: serviceName || externalRef ? "external_service" : null,
+      serviceName,
+      externalRef,
     });
   };
   const clearMonitor = () => updateMonitor(null);
@@ -1333,6 +1347,22 @@ export function IssueProperties({
                 placeholder="What should the agent re-check?"
                 value={monitorNotesInput}
                 onChange={(e) => setMonitorNotesInput(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2 md:flex-row">
+              <input
+                type="text"
+                className="min-w-0 flex-1 rounded-md border border-border bg-transparent px-2 py-1 text-xs"
+                placeholder="External service"
+                value={monitorServiceInput}
+                onChange={(e) => setMonitorServiceInput(e.target.value)}
+              />
+              <input
+                type="text"
+                className="min-w-0 flex-1 rounded-md border border-border bg-transparent px-2 py-1 text-xs"
+                placeholder="External ref or URL"
+                value={monitorExternalRefInput}
+                onChange={(e) => setMonitorExternalRefInput(e.target.value)}
               />
               <div className="flex items-center gap-2">
                 <button

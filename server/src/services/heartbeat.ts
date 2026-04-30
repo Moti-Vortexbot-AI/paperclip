@@ -2333,26 +2333,274 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       .then((rows) => rows[0] ?? null);
   }
 
+  const issueMonitorDispatchColumns = {
+    id: issues.id,
+    companyId: issues.companyId,
+    identifier: issues.identifier,
+    title: issues.title,
+    status: issues.status,
+    assigneeAgentId: issues.assigneeAgentId,
+    assigneeUserId: issues.assigneeUserId,
+    executionPolicy: issues.executionPolicy,
+    executionState: issues.executionState,
+    monitorNextCheckAt: issues.monitorNextCheckAt,
+    monitorWakeRequestedAt: issues.monitorWakeRequestedAt,
+    monitorLastTriggeredAt: issues.monitorLastTriggeredAt,
+    monitorAttemptCount: issues.monitorAttemptCount,
+    monitorNotes: issues.monitorNotes,
+    monitorScheduledBy: issues.monitorScheduledBy,
+  };
+
+  interface IssueMonitorDispatchRow {
+    id: string;
+    companyId: string;
+    identifier: string | null;
+    title: string;
+    status: string;
+    assigneeAgentId: string | null;
+    assigneeUserId: string | null;
+    executionPolicy: Record<string, unknown> | null;
+    executionState: Record<string, unknown> | null;
+    monitorNextCheckAt: Date | null;
+    monitorWakeRequestedAt: Date | null;
+    monitorLastTriggeredAt: Date | null;
+    monitorAttemptCount: number | null;
+    monitorNotes: string | null;
+    monitorScheduledBy: string | null;
+  }
+
+  async function dispatchClaimedIssueMonitor(
+    claimed: IssueMonitorDispatchRow,
+    input: {
+      now: Date;
+      source: "automation" | "on_demand";
+      triggerDetail: "manual" | "system";
+      wakeReason: string;
+      actorType: "user" | "agent" | "system";
+      actorId: string;
+      agentId: string | null;
+      runId: string | null;
+      clearOnClientError: boolean;
+      activitySource: "manual" | "scheduled";
+    },
+  ) {
+    if (!claimed.assigneeAgentId || !claimed.monitorNextCheckAt) {
+      throw conflict("Issue monitor is not ready to dispatch");
+    }
+
+    const scheduledAtIso = claimed.monitorNextCheckAt.toISOString();
+    const nextAttemptCount = (claimed.monitorAttemptCount ?? 0) + 1;
+    const policy = normalizeIssueExecutionPolicy(claimed.executionPolicy ?? null);
+    const monitor = policy?.monitor ?? null;
+    const monitorMetadata = {
+      serviceName: monitor?.serviceName ?? null,
+      externalRef: monitor?.externalRef ?? null,
+      timeoutAt: monitor?.timeoutAt ?? null,
+      maxAttempts: monitor?.maxAttempts ?? null,
+      recoveryPolicy: monitor?.recoveryPolicy ?? null,
+    };
+
+    try {
+      await enqueueWakeup(claimed.assigneeAgentId, {
+        source: input.source,
+        triggerDetail: input.triggerDetail,
+        reason: input.wakeReason,
+        idempotencyKey: `issue-monitor:${claimed.id}:${scheduledAtIso}`,
+        payload: {
+          issueId: claimed.id,
+          nextCheckAt: scheduledAtIso,
+          monitorAttemptCount: nextAttemptCount,
+          monitorNotes: claimed.monitorNotes ?? null,
+          ...monitorMetadata,
+          source: input.activitySource,
+        },
+        requestedByActorType: input.actorType,
+        requestedByActorId: input.actorId,
+        contextSnapshot: {
+          issueId: claimed.id,
+          source: "issue.monitor",
+          wakeReason: input.wakeReason,
+          nextCheckAt: scheduledAtIso,
+          monitorAttemptCount: nextAttemptCount,
+          monitorNotes: claimed.monitorNotes ?? null,
+          ...monitorMetadata,
+          manualTrigger: input.activitySource === "manual",
+        },
+      });
+
+      await db
+        .update(issues)
+        .set({
+          ...buildIssueMonitorTriggeredPatch({
+            issue: claimed,
+            policy,
+            triggeredAt: input.now,
+          }),
+          updatedAt: new Date(),
+        })
+        .where(eq(issues.id, claimed.id));
+
+      await logActivity(db, {
+        companyId: claimed.companyId,
+        actorType: input.actorType,
+        actorId: input.actorId,
+        agentId: input.agentId,
+        runId: input.runId,
+        action: "issue.monitor_triggered",
+        entityType: "issue",
+        entityId: claimed.id,
+        details: {
+          identifier: claimed.identifier,
+          nextCheckAt: scheduledAtIso,
+          lastTriggeredAt: input.now.toISOString(),
+          attemptCount: nextAttemptCount,
+          notes: claimed.monitorNotes ?? null,
+          ...monitorMetadata,
+          source: input.activitySource,
+        },
+      });
+
+      return { outcome: "triggered" as const };
+    } catch (err) {
+      if (err instanceof HttpError && err.status >= 400 && err.status < 500) {
+        if (input.clearOnClientError) {
+          await db
+            .update(issues)
+            .set({
+              ...buildIssueMonitorClearedPatch({
+                issue: claimed,
+                policy,
+                clearReason: "dispatch_skipped",
+                clearedAt: input.now,
+              }),
+              updatedAt: new Date(),
+            })
+            .where(eq(issues.id, claimed.id));
+
+          await logActivity(db, {
+            companyId: claimed.companyId,
+            actorType: input.actorType,
+            actorId: input.actorId,
+            agentId: input.agentId,
+            runId: input.runId,
+            action: "issue.monitor_skipped",
+            entityType: "issue",
+            entityId: claimed.id,
+            details: {
+              identifier: claimed.identifier,
+              nextCheckAt: scheduledAtIso,
+              attemptCount: nextAttemptCount,
+              notes: claimed.monitorNotes ?? null,
+              reason: err.message,
+              source: input.activitySource,
+            },
+          });
+
+          return { outcome: "skipped" as const, reason: err.message };
+        }
+
+        await db
+          .update(issues)
+          .set({
+            monitorWakeRequestedAt: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(issues.id, claimed.id));
+      } else {
+        await db
+          .update(issues)
+          .set({
+            monitorWakeRequestedAt: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(issues.id, claimed.id));
+      }
+
+      throw err;
+    }
+  }
+
+  async function triggerIssueMonitor(issueId: string, input?: {
+    now?: Date;
+    actorType?: "user" | "agent" | "system";
+    actorId?: string | null;
+    agentId?: string | null;
+    runId?: string | null;
+    wakeReason?: string;
+  }) {
+    const now = input?.now ?? new Date();
+    const actorType = input?.actorType ?? "system";
+    const actorId = input?.actorId ?? (actorType === "system" ? "heartbeat_scheduler" : null);
+    if (!actorId) {
+      throw conflict("Issue monitor trigger requires an actor");
+    }
+
+    const issue = await db
+      .select(issueMonitorDispatchColumns)
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .limit(1)
+      .then((rows) => rows[0] ?? null);
+    if (!issue) {
+      throw notFound("Issue not found");
+    }
+    if (!issue.monitorNextCheckAt) {
+      throw conflict("Issue has no scheduled monitor");
+    }
+    if (!issue.assigneeAgentId || issue.assigneeUserId) {
+      throw conflict("Issue monitor requires an agent assignee");
+    }
+    if (!["in_progress", "in_review"].includes(issue.status)) {
+      throw conflict("Issue monitor can only run while the issue is in progress or in review");
+    }
+
+    const staleClaimThreshold = new Date(now.getTime() - 5 * 60 * 1000);
+    const claimed = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(issues)
+        .set({
+          monitorWakeRequestedAt: now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(issues.id, issueId),
+            sql`${issues.monitorNextCheckAt} is not null`,
+            isNull(issues.assigneeUserId),
+            sql`${issues.assigneeAgentId} is not null`,
+            inArray(issues.status, ["in_progress", "in_review"]),
+            or(
+              isNull(issues.monitorWakeRequestedAt),
+              lt(issues.monitorWakeRequestedAt, staleClaimThreshold),
+            ),
+          ),
+        )
+        .returning();
+      return (updated ?? null) as IssueMonitorDispatchRow | null;
+    });
+
+    if (!claimed) {
+      throw conflict("Issue monitor check is already in progress");
+    }
+
+    return dispatchClaimedIssueMonitor(claimed, {
+      now,
+      source: "on_demand",
+      triggerDetail: "manual",
+      wakeReason: input?.wakeReason ?? "issue_monitor_due",
+      actorType,
+      actorId,
+      agentId: input?.agentId ?? null,
+      runId: input?.runId ?? null,
+      clearOnClientError: false,
+      activitySource: "manual",
+    });
+  }
+
   async function tickDueIssueMonitors(now = new Date()) {
     const staleClaimThreshold = new Date(now.getTime() - 5 * 60 * 1000);
     const dueMonitors = await db
-      .select({
-        id: issues.id,
-        companyId: issues.companyId,
-        identifier: issues.identifier,
-        title: issues.title,
-        status: issues.status,
-        assigneeAgentId: issues.assigneeAgentId,
-        assigneeUserId: issues.assigneeUserId,
-        executionPolicy: issues.executionPolicy,
-        executionState: issues.executionState,
-        monitorNextCheckAt: issues.monitorNextCheckAt,
-        monitorWakeRequestedAt: issues.monitorWakeRequestedAt,
-        monitorLastTriggeredAt: issues.monitorLastTriggeredAt,
-        monitorAttemptCount: issues.monitorAttemptCount,
-        monitorNotes: issues.monitorNotes,
-        monitorScheduledBy: issues.monitorScheduledBy,
-      })
+      .select(issueMonitorDispatchColumns)
       .from(issues)
       .where(
         and(
@@ -2396,115 +2644,27 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             ),
           )
           .returning();
-        return updated ?? null;
+        return (updated ?? null) as IssueMonitorDispatchRow | null;
       });
 
-      if (!claimed?.assigneeAgentId || !claimed.monitorNextCheckAt) continue;
-
-      const scheduledAtIso = claimed.monitorNextCheckAt.toISOString();
-      const nextAttemptCount = (claimed.monitorAttemptCount ?? 0) + 1;
-      const policy = normalizeIssueExecutionPolicy(claimed.executionPolicy ?? null);
+      if (!claimed) continue;
 
       try {
-        await enqueueWakeup(claimed.assigneeAgentId, {
+        const result = await dispatchClaimedIssueMonitor(claimed, {
+          now,
           source: "automation",
           triggerDetail: "system",
-          reason: "issue_monitor_due",
-          idempotencyKey: `issue-monitor:${claimed.id}:${scheduledAtIso}`,
-          payload: {
-            issueId: claimed.id,
-            nextCheckAt: scheduledAtIso,
-            monitorAttemptCount: nextAttemptCount,
-            monitorNotes: claimed.monitorNotes ?? null,
-          },
-          requestedByActorType: "system",
-          requestedByActorId: "heartbeat_scheduler",
-          contextSnapshot: {
-            issueId: claimed.id,
-            source: "issue.monitor",
-            wakeReason: "issue_monitor_due",
-            nextCheckAt: scheduledAtIso,
-            monitorAttemptCount: nextAttemptCount,
-            monitorNotes: claimed.monitorNotes ?? null,
-          },
-        });
-
-        await db
-          .update(issues)
-          .set({
-            ...buildIssueMonitorTriggeredPatch({
-              issue: claimed,
-              policy,
-              triggeredAt: now,
-            }),
-            updatedAt: new Date(),
-          })
-          .where(eq(issues.id, claimed.id));
-
-        await logActivity(db, {
-          companyId: claimed.companyId,
+          wakeReason: "issue_monitor_due",
           actorType: "system",
           actorId: "heartbeat_scheduler",
           agentId: null,
           runId: null,
-          action: "issue.monitor_triggered",
-          entityType: "issue",
-          entityId: claimed.id,
-          details: {
-            identifier: claimed.identifier,
-            nextCheckAt: scheduledAtIso,
-            lastTriggeredAt: now.toISOString(),
-            attemptCount: nextAttemptCount,
-            notes: claimed.monitorNotes ?? null,
-          },
+          clearOnClientError: true,
+          activitySource: "scheduled",
         });
-
-        triggered += 1;
+        if (result.outcome === "triggered") triggered += 1;
+        if (result.outcome === "skipped") skipped += 1;
       } catch (err) {
-        if (err instanceof HttpError && err.status >= 400 && err.status < 500) {
-          await db
-            .update(issues)
-            .set({
-              ...buildIssueMonitorClearedPatch({
-                issue: claimed,
-                policy,
-                clearReason: "dispatch_skipped",
-                clearedAt: now,
-              }),
-              updatedAt: new Date(),
-            })
-            .where(eq(issues.id, claimed.id));
-
-          await logActivity(db, {
-            companyId: claimed.companyId,
-            actorType: "system",
-            actorId: "heartbeat_scheduler",
-            agentId: null,
-            runId: null,
-            action: "issue.monitor_skipped",
-            entityType: "issue",
-            entityId: claimed.id,
-            details: {
-              identifier: claimed.identifier,
-              nextCheckAt: scheduledAtIso,
-              attemptCount: nextAttemptCount,
-              notes: claimed.monitorNotes ?? null,
-              reason: err.message,
-            },
-          });
-
-          skipped += 1;
-          continue;
-        }
-
-        await db
-          .update(issues)
-          .set({
-            monitorWakeRequestedAt: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(issues.id, claimed.id));
-
         logger.error({ err, issueId: claimed.id }, "issue monitor tick failed");
       }
     }
@@ -7923,6 +8083,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       }),
 
     wakeup: enqueueWakeup,
+    triggerIssueMonitor,
 
     reportRunActivity: clearDetachedRunWarning,
 

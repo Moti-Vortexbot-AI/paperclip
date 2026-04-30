@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   ISSUE_EXECUTION_DECISION_OUTCOMES,
   ISSUE_EXECUTION_MONITOR_CLEAR_REASONS,
+  ISSUE_EXECUTION_MONITOR_KINDS,
+  ISSUE_EXECUTION_MONITOR_RECOVERY_POLICIES,
   ISSUE_EXECUTION_MONITOR_STATE_STATUSES,
   ISSUE_EXECUTION_POLICY_MODES,
   ISSUE_EXECUTION_STAGE_TYPES,
@@ -110,6 +112,12 @@ export const issueExecutionMonitorPolicySchema = z.object({
   nextCheckAt: z.string().datetime(),
   notes: z.string().max(500).optional().nullable().default(null),
   scheduledBy: z.enum(ISSUE_MONITOR_SCHEDULED_BY).optional().default("assignee"),
+  kind: z.enum(ISSUE_EXECUTION_MONITOR_KINDS).optional().nullable().default(null),
+  serviceName: z.string().trim().min(1).max(120).optional().nullable().default(null),
+  externalRef: z.string().trim().min(1).max(500).optional().nullable().default(null),
+  timeoutAt: z.string().datetime().optional().nullable().default(null),
+  maxAttempts: z.number().int().positive().max(100).optional().nullable().default(null),
+  recoveryPolicy: z.enum(ISSUE_EXECUTION_MONITOR_RECOVERY_POLICIES).optional().nullable().default(null),
 });
 
 export const issueExecutionPolicySchema = z.object({
@@ -126,6 +134,12 @@ export const issueExecutionMonitorStateSchema = z.object({
   attemptCount: z.number().int().nonnegative().default(0),
   notes: z.string().max(500).nullable(),
   scheduledBy: z.enum(ISSUE_MONITOR_SCHEDULED_BY).nullable(),
+  kind: z.enum(ISSUE_EXECUTION_MONITOR_KINDS).nullable().optional().default(null),
+  serviceName: z.string().trim().min(1).max(120).nullable().optional().default(null),
+  externalRef: z.string().trim().min(1).max(500).nullable().optional().default(null),
+  timeoutAt: z.string().datetime().nullable().optional().default(null),
+  maxAttempts: z.number().int().positive().max(100).nullable().optional().default(null),
+  recoveryPolicy: z.enum(ISSUE_EXECUTION_MONITOR_RECOVERY_POLICIES).nullable().optional().default(null),
   clearedAt: z.string().datetime().nullable(),
   clearReason: z.enum(ISSUE_EXECUTION_MONITOR_CLEAR_REASONS).nullable(),
 });

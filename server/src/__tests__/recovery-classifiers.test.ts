@@ -74,6 +74,39 @@ describe("recovery classifier boundary", () => {
     expect(classifyIssueGraphLiveness(input)).toEqual(classifyIssueGraphLivenessCompat(input));
   });
 
+  it("treats a scheduled monitor as an explicit review action path", () => {
+    const findings = classifyIssueGraphLiveness({
+      issues: [
+        {
+          id: issueId,
+          companyId,
+          identifier: "PAP-2945",
+          title: "Wait for external review",
+          status: "in_review",
+          assigneeAgentId: agentId,
+          assigneeUserId: null,
+          createdByAgentId: null,
+          createdByUserId: null,
+          executionState: null,
+          monitorNextCheckAt: "2026-04-30T19:00:00.000Z",
+        },
+      ],
+      relations: [],
+      agents: [
+        {
+          id: agentId,
+          companyId,
+          name: "Coder",
+          role: "engineer",
+          status: "idle",
+          reportsTo: managerId,
+        },
+      ],
+    });
+
+    expect(findings).toEqual([]);
+  });
+
   it("keeps run liveness continuation decision parity with the compatibility export", () => {
     const input = {
       run: {

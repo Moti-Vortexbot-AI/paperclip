@@ -46,9 +46,9 @@ describeEmbeddedPostgres("issue monitor scheduler", () => {
     }
     seededAgentIds.clear();
     await new Promise((resolve) => setTimeout(resolve, 50));
-    await db.delete(activityLog);
     await db.delete(issues);
     await db.delete(heartbeatRunEvents);
+    await db.delete(activityLog);
     await db.delete(heartbeatRuns);
     await db.delete(agentWakeupRequests);
     await db.delete(agentRuntimeState);
@@ -182,6 +182,52 @@ describeEmbeddedPostgres("issue monitor scheduler", () => {
       .where(eq(activityLog.entityId, issueId))
       .then((rows) => rows.map((row) => row.action));
     expect(activity).toContain("issue.monitor_triggered");
+  });
+
+  it("lets the board trigger a scheduled issue monitor immediately", async () => {
+    const { issueId, agentId, nextCheckAt } = await seedFixture();
+    const heartbeat = heartbeatService(db);
+    const triggeredAt = new Date("2026-04-11T12:00:00.000Z");
+
+    const result = await heartbeat.triggerIssueMonitor(issueId, {
+      now: triggeredAt,
+      actorType: "user",
+      actorId: "local-board",
+    });
+
+    expect(result.outcome).toBe("triggered");
+
+    const issue = await db.select().from(issues).where(eq(issues.id, issueId)).then((rows) => rows[0]!);
+    expect(issue.monitorNextCheckAt).toBeNull();
+    expect(issue.monitorLastTriggeredAt?.toISOString()).toBe(triggeredAt.toISOString());
+    expect(issue.monitorAttemptCount).toBe(1);
+    expect(normalizeIssueExecutionPolicy(issue.executionPolicy ?? null)?.monitor ?? null).toBeNull();
+
+    const wakeup = await db
+      .select()
+      .from(agentWakeupRequests)
+      .where(eq(agentWakeupRequests.agentId, agentId))
+      .then((rows) => rows[0] ?? null);
+    expect(wakeup?.reason).toBe("issue_monitor_due");
+    expect(wakeup?.payload).toMatchObject({
+      issueId,
+      nextCheckAt: nextCheckAt.toISOString(),
+      source: "manual",
+    });
+
+    const activity = await db
+      .select()
+      .from(activityLog)
+      .where(eq(activityLog.entityId, issueId))
+      .orderBy(activityLog.createdAt);
+    expect(activity.map((row) => row.action)).toContain("issue.monitor_triggered");
+    const triggerEvent = activity.find((row) => row.action === "issue.monitor_triggered");
+    expect(triggerEvent?.actorType).toBe("user");
+    expect(triggerEvent?.actorId).toBe("local-board");
+    expect(triggerEvent?.details).toMatchObject({
+      nextCheckAt: nextCheckAt.toISOString(),
+      source: "manual",
+    });
   });
 
   it("clears due monitors that cannot be dispatched and records a skip", async () => {

@@ -23,6 +23,7 @@ export interface IssueLivenessIssueInput {
   createdByAgentId?: string | null;
   createdByUserId?: string | null;
   executionState?: Record<string, unknown> | null;
+  monitorNextCheckAt?: Date | string | null;
 }
 
 export interface IssueLivenessRelationInput {
@@ -138,6 +139,10 @@ function hasWaitingPath(
   waitingPaths: IssueLivenessWaitingPathInput[],
 ) {
   return waitingPaths.some((entry) => entry.companyId === companyId && entry.issueId === issueId);
+}
+
+function hasScheduledMonitor(issue: IssueLivenessIssueInput) {
+  return Boolean(issue.monitorNextCheckAt);
 }
 
 function readPrincipalAgentId(principal: unknown): string | null {
@@ -351,6 +356,7 @@ export function classifyIssueGraphLiveness(input: IssueGraphLivenessInput): Issu
 
   function hasExplicitWaitingPath(issue: IssueLivenessIssueInput) {
     return Boolean(issue.assigneeUserId) ||
+      hasScheduledMonitor(issue) ||
       hasActiveExecutionPath(issue.companyId, issue.id, activeRuns, queuedWakeRequests) ||
       hasWaitingPath(issue.companyId, issue.id, pendingInteractions) ||
       hasWaitingPath(issue.companyId, issue.id, pendingApprovals) ||

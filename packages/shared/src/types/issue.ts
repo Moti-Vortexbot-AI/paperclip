@@ -1,5 +1,7 @@
 import type {
   IssueExecutionMonitorClearReason,
+  IssueExecutionMonitorKind,
+  IssueExecutionMonitorRecoveryPolicy,
   IssueExecutionMonitorStateStatus,
   IssueExecutionDecisionOutcome,
   IssueMonitorScheduledBy,
@@ -208,6 +210,12 @@ export interface IssueExecutionMonitorPolicy {
   nextCheckAt: string;
   notes: string | null;
   scheduledBy: IssueMonitorScheduledBy;
+  kind?: IssueExecutionMonitorKind | null;
+  serviceName?: string | null;
+  externalRef?: string | null;
+  timeoutAt?: string | null;
+  maxAttempts?: number | null;
+  recoveryPolicy?: IssueExecutionMonitorRecoveryPolicy | null;
 }
 
 export interface IssueExecutionPolicy {
@@ -224,6 +232,12 @@ export interface IssueExecutionMonitorState {
   attemptCount: number;
   notes: string | null;
   scheduledBy: IssueMonitorScheduledBy | null;
+  kind?: IssueExecutionMonitorKind | null;
+  serviceName?: string | null;
+  externalRef?: string | null;
+  timeoutAt?: string | null;
+  maxAttempts?: number | null;
+  recoveryPolicy?: IssueExecutionMonitorRecoveryPolicy | null;
   clearedAt: string | null;
   clearReason: IssueExecutionMonitorClearReason | null;
 }

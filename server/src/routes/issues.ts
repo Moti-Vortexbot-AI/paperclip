@@ -202,6 +202,12 @@ function summarizeIssueMonitor(
     attemptCount: issue.monitorAttemptCount ?? state?.monitor?.attemptCount ?? 0,
     notes: policy?.monitor?.notes ?? issue.monitorNotes ?? state?.monitor?.notes ?? null,
     scheduledBy: issue.monitorScheduledBy ?? policy?.monitor?.scheduledBy ?? state?.monitor?.scheduledBy ?? null,
+    kind: policy?.monitor?.kind ?? state?.monitor?.kind ?? null,
+    serviceName: policy?.monitor?.serviceName ?? state?.monitor?.serviceName ?? null,
+    externalRef: policy?.monitor?.externalRef ?? state?.monitor?.externalRef ?? null,
+    timeoutAt: policy?.monitor?.timeoutAt ?? state?.monitor?.timeoutAt ?? null,
+    maxAttempts: policy?.monitor?.maxAttempts ?? state?.monitor?.maxAttempts ?? null,
+    recoveryPolicy: policy?.monitor?.recoveryPolicy ?? state?.monitor?.recoveryPolicy ?? null,
     status: state?.monitor?.status ?? (policy?.monitor ? "scheduled" : null),
     clearReason: state?.monitor?.clearReason ?? null,
   };
@@ -1908,6 +1914,11 @@ export function issueRoutes(
           nextCheckAt: executionPolicy.monitor.nextCheckAt,
           notes: executionPolicy.monitor.notes,
           scheduledBy: executionPolicy.monitor.scheduledBy,
+          serviceName: executionPolicy.monitor.serviceName ?? null,
+          externalRef: executionPolicy.monitor.externalRef ?? null,
+          timeoutAt: executionPolicy.monitor.timeoutAt ?? null,
+          maxAttempts: executionPolicy.monitor.maxAttempts ?? null,
+          recoveryPolicy: executionPolicy.monitor.recoveryPolicy ?? null,
         },
       });
     }
@@ -1984,6 +1995,27 @@ export function issueRoutes(
     });
 
     res.status(201).json(issue);
+  });
+
+  router.post("/issues/:id/monitor/check-now", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    assertCanManageIssueMonitor(req, issue.assigneeAgentId, true);
+
+    const actor = getActorInfo(req);
+    await heartbeat.triggerIssueMonitor(issue.id, {
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId ?? null,
+      runId: actor.runId ?? null,
+    });
+
+    res.json({ ok: true });
   });
 
   router.patch("/issues/:id", validate(updateIssueRouteSchema), async (req, res) => {
@@ -2464,6 +2496,11 @@ export function issueRoutes(
           previousNextCheckAt: previousMonitor.nextCheckAt,
           notes: nextMonitor.notes,
           scheduledBy: nextMonitor.scheduledBy,
+          serviceName: nextMonitor.serviceName,
+          externalRef: nextMonitor.externalRef,
+          timeoutAt: nextMonitor.timeoutAt,
+          maxAttempts: nextMonitor.maxAttempts,
+          recoveryPolicy: nextMonitor.recoveryPolicy,
         },
       });
     } else if (!nextMonitor.nextCheckAt && previousMonitor.nextCheckAt) {

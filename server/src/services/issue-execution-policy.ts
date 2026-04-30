@@ -69,6 +69,34 @@ function normalizeMonitorNotes(notes: string | null | undefined) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeMonitorText(value: string | null | undefined) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function monitorMetadataFromPolicy(monitor: IssueExecutionMonitorPolicy) {
+  return {
+    kind: monitor.kind ?? null,
+    serviceName: normalizeMonitorText(monitor.serviceName),
+    externalRef: normalizeMonitorText(monitor.externalRef),
+    timeoutAt: monitor.timeoutAt ?? null,
+    maxAttempts: monitor.maxAttempts ?? null,
+    recoveryPolicy: monitor.recoveryPolicy ?? null,
+  };
+}
+
+function monitorMetadataFromState(state: IssueExecutionMonitorState | null | undefined) {
+  return {
+    kind: state?.kind ?? null,
+    serviceName: normalizeMonitorText(state?.serviceName),
+    externalRef: normalizeMonitorText(state?.externalRef),
+    timeoutAt: state?.timeoutAt ?? null,
+    maxAttempts: state?.maxAttempts ?? null,
+    recoveryPolicy: state?.recoveryPolicy ?? null,
+  };
+}
+
 function blankExecutionState(): IssueExecutionState {
   return {
     status: "idle",
@@ -77,6 +105,7 @@ function blankExecutionState(): IssueExecutionState {
     currentStageType: null,
     currentParticipant: null,
     returnAssignee: null,
+    reviewRequest: null,
     completedStageIds: [],
     lastDecisionId: null,
     lastDecisionOutcome: null,
@@ -120,6 +149,7 @@ function derivePersistedMonitorState(input: {
   const scheduledByRaw = input.issue.monitorScheduledBy ?? scheduledMonitor?.scheduledBy ?? fromState?.scheduledBy ?? null;
   const scheduledBy =
     scheduledByRaw === "assignee" || scheduledByRaw === "board" ? scheduledByRaw : null;
+  const metadata = scheduledMonitor ? monitorMetadataFromPolicy(scheduledMonitor) : monitorMetadataFromState(fromState);
 
   if (nextCheckAt) {
     return {
@@ -129,6 +159,7 @@ function derivePersistedMonitorState(input: {
       attemptCount,
       notes,
       scheduledBy,
+      ...metadata,
       clearedAt: null,
       clearReason: null,
     };
@@ -141,6 +172,7 @@ function derivePersistedMonitorState(input: {
       scheduledBy,
       attemptCount,
       lastTriggeredAt,
+      ...metadata,
     };
   }
 
@@ -152,6 +184,7 @@ function derivePersistedMonitorState(input: {
       attemptCount,
       notes,
       scheduledBy,
+      ...metadata,
       clearedAt: null,
       clearReason: null,
     };
@@ -171,6 +204,7 @@ function buildScheduledMonitorState(
     attemptCount: previous?.attemptCount ?? 0,
     notes: monitor.notes ?? null,
     scheduledBy: monitor.scheduledBy,
+    ...monitorMetadataFromPolicy(monitor),
     clearedAt: null,
     clearReason: null,
   };
@@ -187,6 +221,7 @@ function buildTriggeredMonitorState(input: {
     attemptCount: (input.previous?.attemptCount ?? 0) + 1,
     notes: input.previous?.notes ?? null,
     scheduledBy: input.previous?.scheduledBy ?? null,
+    ...monitorMetadataFromState(input.previous),
     clearedAt: null,
     clearReason: null,
   };
@@ -204,6 +239,7 @@ function buildClearedMonitorState(input: {
     attemptCount: input.previous?.attemptCount ?? 0,
     notes: input.previous?.notes ?? null,
     scheduledBy: input.previous?.scheduledBy ?? null,
+    ...monitorMetadataFromState(input.previous),
     clearedAt: input.clearedAt.toISOString(),
     clearReason: input.clearReason,
   };
@@ -314,6 +350,12 @@ export function normalizeIssueExecutionPolicy(input: unknown): IssueExecutionPol
       nextCheckAt: parsed.data.monitor.nextCheckAt,
       notes: normalizeMonitorNotes(parsed.data.monitor.notes),
       scheduledBy: parsed.data.monitor.scheduledBy,
+      kind: parsed.data.monitor.kind ?? null,
+      serviceName: normalizeMonitorText(parsed.data.monitor.serviceName),
+      externalRef: normalizeMonitorText(parsed.data.monitor.externalRef),
+      timeoutAt: parsed.data.monitor.timeoutAt ?? null,
+      maxAttempts: parsed.data.monitor.maxAttempts ?? null,
+      recoveryPolicy: parsed.data.monitor.recoveryPolicy ?? null,
     }
     : null;
 

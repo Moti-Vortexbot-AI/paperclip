@@ -304,6 +304,14 @@ export function formatIssueActivityAction(
   });
   if (structuredChange) return structuredChange;
 
+  if (action.startsWith("issue.monitor_") && details) {
+    const serviceName = typeof details.serviceName === "string" && details.serviceName.trim()
+      ? details.serviceName.trim()
+      : null;
+    const base = ISSUE_ACTIVITY_LABELS[action] ?? action.replace(/[._]/g, " ");
+    return serviceName ? `${base} for ${serviceName}` : base;
+  }
+
   if (
     (action === "issue.document_created" || action === "issue.document_updated" || action === "issue.document_deleted") &&
     details
