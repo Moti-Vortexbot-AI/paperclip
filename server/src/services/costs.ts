@@ -145,7 +145,7 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
             WHERE ${issues.companyId} = ${companyId}
               AND ${issues.id} = ${issueId}
               AND ${issues.hiddenAt} IS NULL
-            UNION
+            UNION ALL
             SELECT ${childIssues.id}
             FROM ${issues} ${childIssues}
             JOIN issue_tree ON ${childIssues.parentId} = issue_tree.id
