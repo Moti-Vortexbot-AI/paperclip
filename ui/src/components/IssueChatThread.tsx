@@ -3101,6 +3101,7 @@ export function IssueChatThread({
   const lastUserMessageIdRef = useRef<string | null>(null);
   const spacerBaselineAnchorRef = useRef<string | null>(null);
   const spacerInitialReserveRef = useRef(0);
+  const latestSettleTimeoutsRef = useRef<number[]>([]);
   const [bottomSpacerHeight, setBottomSpacerHeight] = useState(0);
   const displayLiveRuns = useMemo(() => {
     const deduped = new Map<string, LiveRunForIssue>();
@@ -3356,6 +3357,15 @@ export function IssueChatThread({
     bottomAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }
 
+  function clearLatestSettleTimeouts() {
+    for (const timeout of latestSettleTimeoutsRef.current) {
+      window.clearTimeout(timeout);
+    }
+    latestSettleTimeoutsRef.current = [];
+  }
+
+  useEffect(() => clearLatestSettleTimeouts, []);
+
   // Walks the thread by anchor and lands on the latest `comment-*` row, with
   // a short series of settle passes. The virtualizer estimates row sizes for
   // unmeasured rows, and that estimate undershoots tall markdown comments —
@@ -3383,9 +3393,12 @@ export function IssueChatThread({
 
     if (typeof window === "undefined") return;
 
+    clearLatestSettleTimeouts();
     const settleDelays = [380, 760, 1140];
     settleDelays.forEach((delay) => {
-      window.setTimeout(() => {
+      const timeout = window.setTimeout(() => {
+        latestSettleTimeoutsRef.current = latestSettleTimeoutsRef.current.filter((id) => id !== timeout);
+        if (typeof document === "undefined") return;
         const el = document.getElementById(latestCommentAnchor);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -3399,6 +3412,7 @@ export function IssueChatThread({
           behavior: "auto",
         });
       }, delay);
+      latestSettleTimeoutsRef.current.push(timeout);
     });
   }
 
