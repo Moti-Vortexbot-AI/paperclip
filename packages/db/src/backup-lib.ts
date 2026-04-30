@@ -19,6 +19,11 @@ export type RunDatabaseBackupOptions = {
   retention: BackupRetentionPolicy;
   filenamePrefix?: string;
   connectTimeoutSeconds?: number;
+  /**
+   * @deprecated Migration-journal schemas are included with the normal backup
+   * scope. This option is kept for compatibility and no longer changes backup
+   * engine selection.
+   */
   includeMigrationJournal?: boolean;
   excludeTables?: string[];
   nullifyColumns?: Record<string, string[]>;
@@ -235,8 +240,7 @@ function nonSystemSchemaPredicate(identifier: string): string {
 }
 
 function hasBackupTransforms(opts: RunDatabaseBackupOptions): boolean {
-  return opts.includeMigrationJournal === true ||
-    (opts.excludeTables?.length ?? 0) > 0 ||
+  return (opts.excludeTables?.length ?? 0) > 0 ||
     Object.keys(opts.nullifyColumns ?? {}).length > 0;
 }
 
