@@ -63,6 +63,7 @@ It:
 - verifies the pushed commit
 - computes the canary version for the current UTC date
 - publishes under npm dist-tag `canary`
+- waits for npm dist-tags and package manifests to converge
 - creates a git tag `canary/vYYYY.MDD.P-canary.N`
 
 Users install canaries with:
