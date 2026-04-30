@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   collectInternalDependencyProblems,
   createManifestLookupKey,
+  fetchRegistryJson,
   verifyPackageRegistryState,
 } from "./verify-release-registry-state.mjs";
 
@@ -142,4 +143,26 @@ test("verifyPackageRegistryState still fails when the dist-tag is stale", () => 
     }),
     ["@paperclipai/ui: dist-tag canary resolves to 2026.429.0-canary.2, expected 2026.430.0-canary.0"],
   );
+});
+
+test("fetchRegistryJson times out hung requests", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (_url, { signal }) =>
+    new Promise((_resolve, reject) => {
+      signal.addEventListener(
+        "abort",
+        () => reject(new DOMException("The operation was aborted.", "AbortError")),
+        { once: true },
+      );
+    });
+
+  try {
+    await assert.rejects(
+      fetchRegistryJson(new URL("https://registry.npmjs.org/@paperclipai%2Fui"), { timeoutMs: 1 }),
+      /timed out/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

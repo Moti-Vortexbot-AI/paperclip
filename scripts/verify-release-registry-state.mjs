@@ -71,12 +71,26 @@ function createRegistryUrl(packageName, version = "") {
   return new URL(`${encodedPackage}/${encodeURIComponent(version)}`, baseUrl);
 }
 
-async function fetchRegistryJson(url, { allowMissing = false } = {}) {
-  const response = await fetch(url, {
-    headers: {
-      accept: "application/vnd.npm.install-v1+json, application/json;q=0.9",
-    },
-  });
+export async function fetchRegistryJson(url, { allowMissing = false, timeoutMs = 30_000 } = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+
+  try {
+    response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        accept: "application/vnd.npm.install-v1+json, application/json;q=0.9",
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`npm registry request timed out for ${url} after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (response.status === 404 && allowMissing) {
     return null;
