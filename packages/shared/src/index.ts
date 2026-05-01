@@ -347,6 +347,8 @@ export type {
   IssueBlockerAttentionState,
   IssueProductivityReview,
   IssueProductivityReviewTrigger,
+  SuccessfulRunHandoffState,
+  SuccessfulRunHandoffStateKind,
   IssueReferenceSource,
   IssueRelatedWorkItem,
   IssueRelatedWorkSummary,
