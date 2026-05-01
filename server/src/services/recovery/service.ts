@@ -188,7 +188,7 @@ function isUnsuccessfulTerminalIssueRun(latestRun: LatestIssueRun) {
   );
 }
 
-function isSuccessfulInProgressContinuationRun(latestRun: LatestIssueRun) {
+function isSuccessfulInProgressContinuationRun(latestRun: LatestIssueRun): latestRun is NonNullable<LatestIssueRun> {
   return latestRun?.status === "succeeded";
 }
 
