@@ -56,6 +56,43 @@ const longerWaitIssue: Issue = {
   },
 };
 
+const triggeredIssue: Issue = {
+  ...baseIssue,
+  monitorNextCheckAt: null,
+  monitorLastTriggeredAt: new Date(Date.now() - 3 * 60_000),
+  monitorAttemptCount: 3,
+  monitorNotes: "Greptile review was checked and needs another pass.",
+  executionPolicy: {
+    ...(baseIssue.executionPolicy ?? { mode: "normal", commentRequired: true, stages: [] }),
+  },
+  executionState: {
+    ...(baseIssue.executionState ?? {
+      status: "pending",
+      currentStageId: null,
+      currentStageIndex: null,
+      currentStageType: null,
+      currentParticipant: null,
+      returnAssignee: null,
+      reviewRequest: null,
+      completedStageIds: [],
+      lastDecisionId: null,
+      lastDecisionOutcome: null,
+    }),
+    monitor: null,
+  },
+};
+
+const clearedIssue: Issue = {
+  ...baseIssue,
+  monitorNextCheckAt: null,
+  monitorLastTriggeredAt: null,
+  monitorAttemptCount: 0,
+  monitorNotes: null,
+  executionPolicy: {
+    ...(baseIssue.executionPolicy ?? { mode: "normal", commentRequired: true, stages: [] }),
+  },
+};
+
 function MonitorSurfaceStories() {
   return (
     <div className="space-y-8 p-6">
@@ -112,6 +149,32 @@ function MonitorSurfaceStories() {
           <div className="rounded-lg border border-border bg-background/70 p-4">
             <IssueProperties
               issue={monitoredIssue}
+              onUpdate={() => undefined}
+              inline
+            />
+          </div>
+        </section>
+
+        <section className="space-y-2">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">
+            IssueProperties Monitor row - Triggered recently
+          </div>
+          <div className="rounded-lg border border-border bg-background/70 p-4">
+            <IssueProperties
+              issue={triggeredIssue}
+              onUpdate={() => undefined}
+              inline
+            />
+          </div>
+        </section>
+
+        <section className="space-y-2">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">
+            IssueProperties Monitor row - Cleared
+          </div>
+          <div className="rounded-lg border border-border bg-background/70 p-4">
+            <IssueProperties
+              issue={clearedIssue}
               onUpdate={() => undefined}
               inline
             />

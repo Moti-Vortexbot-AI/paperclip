@@ -525,7 +525,7 @@ export function IssueProperties({
     updateMonitor({
       nextCheckAt: nextCheckAt.toISOString(),
       notes: monitorNotesInput.trim() || null,
-      scheduledBy: issue.executionPolicy?.monitor?.scheduledBy ?? "assignee",
+      scheduledBy: "board",
       kind: serviceName ? "external_service" : null,
       serviceName,
       externalRef: null,

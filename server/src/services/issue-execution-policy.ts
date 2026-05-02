@@ -500,6 +500,7 @@ function buildStateWithCompletedStages(input: {
     completedStageIds: input.completedStageIds,
     lastDecisionId: input.previous?.lastDecisionId ?? null,
     lastDecisionOutcome: input.previous?.lastDecisionOutcome ?? null,
+    monitor: input.previous?.monitor ?? null,
   };
 }
 
@@ -519,6 +520,7 @@ function buildSkippedStageCompletedState(input: {
     completedStageIds: input.completedStageIds,
     lastDecisionId: input.previous?.lastDecisionId ?? null,
     lastDecisionOutcome: input.previous?.lastDecisionOutcome ?? null,
+    monitor: input.previous?.monitor ?? null,
   };
 }
 
