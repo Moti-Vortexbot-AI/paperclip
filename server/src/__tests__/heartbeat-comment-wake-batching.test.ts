@@ -1579,6 +1579,23 @@ describe("heartbeat comment wake batching", () => {
       expect(sourceRun?.issueCommentStatus).toBe("satisfied");
       expect(sourceRun?.issueCommentSatisfiedByCommentId).not.toBeNull();
 
+      await waitFor(async () => {
+        const comments = await db
+          .select()
+          .from(issueComments)
+          .where(eq(issueComments.issueId, issueId));
+        const wakeups = await db
+          .select()
+          .from(agentWakeupRequests)
+          .where(and(eq(agentWakeupRequests.companyId, companyId), eq(agentWakeupRequests.agentId, agentId)));
+
+        const hasHandoffComment = comments.some((comment) =>
+          comment.body.startsWith("## This issue still needs a next step")
+        );
+        const hasHandoffWake = wakeups.some((wakeup) => wakeup.reason === "finish_successful_run_handoff");
+        return hasHandoffComment && hasHandoffWake;
+      });
+
       const comments = await db
         .select()
         .from(issueComments)
