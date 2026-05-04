@@ -9,6 +9,9 @@ packages:
   # Keep this smoke fixture installable as a local plugin example without
   # forcing PRs to commit pnpm-lock.yaml for a new workspace importer.
   - "!packages/plugins/examples/plugin-orchestration-smoke-example"
+  # Keep the LLM Wiki plugin installable as a local plugin package without
+  # forcing PRs to commit pnpm-lock.yaml for its third-party UI/test deps.
+  - "!packages/plugins/plugin-llm-wiki"
   - server
   - ui
   - cli
