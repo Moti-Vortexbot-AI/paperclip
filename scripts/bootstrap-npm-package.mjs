@@ -109,7 +109,8 @@ function ensureNpmAuth() {
     throw new Error(
       [
         "npm auth check failed.",
-        "Run `npm login` or `npm adduser` on this maintainer machine with an npm account that can publish to the @paperclipai scope, then rerun with --publish.",
+        "This usually means the machine is either not logged into npm yet or has a stale token in ~/.npmrc.",
+        "Run `npm logout --registry=https://registry.npmjs.org/` and then `npm login` or `npm adduser` on this maintainer machine with an npm account that can publish to the @paperclipai scope, then rerun with --publish.",
         "Do not use this auth flow in CI; it is only for the one-time human bootstrap publish.",
       ].join(" "),
     );

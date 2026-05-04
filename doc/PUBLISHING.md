@@ -213,7 +213,7 @@ The helper script:
 - only runs the real `npm publish --access public` when `--publish` is provided
 
 For the real `--publish` step, the maintainer machine must already be authenticated to npm.
-If `npm whoami` returns `401`, run `npm login` or `npm adduser` locally as an npm org member first, then rerun the helper.
+If `npm whoami` returns `401`, first run `npm logout --registry=https://registry.npmjs.org/` to clear any stale local auth, then run `npm login` or `npm adduser` locally as an npm org member, and finally rerun the helper.
 That local human auth is fine for the one-time bootstrap publish; we just do not want the same auth model inside CI.
 
 After that first publish succeeds:
