@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { PLUGIN_CAPABILITIES } from "../constants.js";
 import { pluginUiSlotDeclarationSchema } from "./plugin.js";
+
+describe("plugin capability constants", () => {
+  it("exposes each capability once", () => {
+    expect(new Set(PLUGIN_CAPABILITIES).size).toBe(PLUGIN_CAPABILITIES.length);
+  });
+});
 
 describe("plugin UI slot validators", () => {
   it("accepts route-scoped sidebar slots with a routePath", () => {
