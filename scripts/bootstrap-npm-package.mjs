@@ -30,8 +30,10 @@ function usage() {
 function parseArgs(argv) {
   const flags = new Set();
   let selector = null;
+  let otp = null;
 
-  for (const arg of argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
     if (arg === "--") {
       continue;
     }
@@ -41,8 +43,18 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--otp") {
+      const value = argv[index + 1];
+      if (!value || value.startsWith("--")) {
+        throw new Error("expected a one-time password after --otp");
+      }
+      otp = value;
+      index += 1;
+      continue;
+    }
+
     if (arg === "--help" || arg === "-h") {
-      return { help: true, selector: null, publish: false, skipBuild: false };
+      return { help: true, selector: null, publish: false, skipBuild: false, otp: null };
     }
 
     if (arg.startsWith("--")) {
@@ -61,6 +73,7 @@ function parseArgs(argv) {
     selector,
     publish: flags.has("--publish"),
     skipBuild: flags.has("--skip-build"),
+    otp,
   };
 }
 
@@ -90,6 +103,10 @@ function runChecked(command, args, options = {}) {
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} failed with status ${result.status ?? "unknown"}`);
   }
+}
+
+function formatCommand(command, args) {
+  return `${command} ${args.join(" ")}`;
 }
 
 function ensureNpmAuth() {
@@ -170,8 +187,38 @@ function printNextSteps(pkg) {
   );
 }
 
+function publishPackage(pkg, otp) {
+  const publishArgs = ["publish", "--access", "public"];
+  if (otp) {
+    publishArgs.push("--otp", otp);
+  }
+
+  const result = runCommand("npm", publishArgs, { cwd: join(repoRoot, pkg.dir) });
+  const stdout = result.stdout ?? "";
+  const stderr = result.stderr ?? "";
+  const output = `${stdout}\n${stderr}`.trim();
+
+  if (stdout) process.stdout.write(stdout);
+  if (stderr) process.stderr.write(stderr);
+
+  if (result.status === 0) {
+    return;
+  }
+
+  if (/\bEOTP\b|one-time password/i.test(output)) {
+    throw new Error(
+      [
+        "npm publish reached the publish-time 2FA check.",
+        "Complete the browser auth URL printed by npm and rerun the helper, or rerun with `--otp <code>` if your npm account uses authenticator-app codes.",
+      ].join(" "),
+    );
+  }
+
+  throw new Error(`${formatCommand("npm", publishArgs)} failed with status ${result.status ?? "unknown"}`);
+}
+
 function main(argv) {
-  const { help, selector, publish, skipBuild } = parseArgs(argv);
+  const { help, selector, publish, skipBuild, otp } = parseArgs(argv);
 
   if (help) {
     usage();
@@ -219,7 +266,7 @@ function main(argv) {
   }
 
   process.stdout.write(`Publishing ${pkg.name}...\n`);
-  runChecked("npm", ["publish", "--access", "public"], { cwd: join(repoRoot, pkg.dir) });
+  publishPackage(pkg, otp);
   printNextSteps(pkg);
 }
 
@@ -238,5 +285,6 @@ export {
   ensureNpmAuth,
   inspectNpmPackage,
   parseArgs,
+  publishPackage,
   resolveTargetPackage,
 };

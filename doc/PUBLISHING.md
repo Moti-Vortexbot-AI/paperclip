@@ -203,6 +203,9 @@ pnpm run release:bootstrap-package -- @paperclipai/adapter-acpx-local
 
 # one-time first publish from an authenticated maintainer machine
 pnpm run release:bootstrap-package -- @paperclipai/adapter-acpx-local --publish
+
+# if npm requires an authenticator-app code for publish
+pnpm run release:bootstrap-package -- @paperclipai/adapter-acpx-local --publish --otp 123456
 ```
 
 The helper script:
@@ -215,6 +218,7 @@ The helper script:
 For the real `--publish` step, the maintainer machine must already be authenticated to npm.
 If `npm whoami` returns `401`, first run `npm logout --registry=https://registry.npmjs.org/` to clear any stale local auth, then run `npm login` or `npm adduser` locally as an npm org member, and finally rerun the helper.
 That local human auth is fine for the one-time bootstrap publish; we just do not want the same auth model inside CI.
+If `npm publish` returns `EOTP`, complete the browser auth URL that npm prints or rerun the helper with `--otp <code>` if your npm account uses authenticator-app 2FA.
 
 After that first publish succeeds:
 

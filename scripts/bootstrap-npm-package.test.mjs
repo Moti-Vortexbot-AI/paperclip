@@ -9,6 +9,17 @@ test("parseArgs recognizes publish and skip-build flags", () => {
     selector: "@paperclipai/adapter-acpx-local",
     publish: true,
     skipBuild: true,
+    otp: null,
+  });
+});
+
+test("parseArgs accepts an explicit otp value", () => {
+  assert.deepEqual(parseArgs(["packages/adapters/acpx-local", "--publish", "--otp", "123456"]), {
+    help: false,
+    selector: "packages/adapters/acpx-local",
+    publish: true,
+    skipBuild: false,
+    otp: "123456",
   });
 });
 
@@ -18,6 +29,7 @@ test("parseArgs returns help mode", () => {
     selector: null,
     publish: false,
     skipBuild: false,
+    otp: null,
   });
 });
 
