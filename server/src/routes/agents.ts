@@ -1278,6 +1278,17 @@ export function agentRoutes(
     };
   }
 
+  function redactAgentSecretsForResponse<T extends Awaited<ReturnType<typeof svc.getById>>>(agent: T): T {
+    if (!agent) return agent;
+    const adapterConfig = redactEventPayload(
+      (agent as { adapterConfig?: unknown }).adapterConfig as Record<string, unknown> | null,
+    );
+    const runtimeConfig = redactEventPayload(
+      (agent as { runtimeConfig?: unknown }).runtimeConfig as Record<string, unknown> | null,
+    );
+    return { ...agent, adapterConfig, runtimeConfig } as T;
+  }
+
   function redactAgentConfiguration(agent: Awaited<ReturnType<typeof svc.getById>>) {
     if (!agent) return null;
     return {
@@ -1613,7 +1624,7 @@ export function agentRoutes(
     const result = await svc.list(companyId);
     const canReadConfigs = await actorCanReadConfigurationsForCompany(req, companyId);
     if (canReadConfigs) {
-      res.json(result);
+      res.json(result.map((agent) => redactAgentSecretsForResponse(agent)));
       return;
     }
     res.json(result.map((agent) => redactForRestrictedAgentView(agent)));
@@ -1805,7 +1816,7 @@ export function agentRoutes(
       res.json(await buildAgentDetail(agent, { restricted: true }));
       return;
     }
-    res.json(await buildAgentDetail(agent));
+    res.json(await buildAgentDetail(redactAgentSecretsForResponse(agent)));
   });
 
   router.get("/agents/:id/configuration", async (req, res) => {
