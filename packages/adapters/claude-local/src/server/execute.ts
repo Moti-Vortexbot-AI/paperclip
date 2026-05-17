@@ -16,6 +16,7 @@ import {
   ensureAdapterExecutionTargetRuntimeCommandInstalled,
   prepareAdapterExecutionTargetRuntime,
   readAdapterExecutionTarget,
+  resolveAdapterExecutionTargetTimeoutSec,
   resolveAdapterExecutionTargetCommandForLogs,
   runAdapterExecutionTargetProcess,
   runAdapterExecutionTargetShellCommand,
@@ -58,6 +59,7 @@ import { prepareClaudeConfigSeed } from "./claude-config.js";
 import { resolveClaudeDesiredSkillNames } from "./skills.js";
 import { isBedrockModelId } from "./models.js";
 import { prepareClaudePromptBundle } from "./prompt-cache.js";
+import { buildClaudeExecutionPermissionArgs } from "./permissions.js";
 import { SANDBOX_INSTALL_COMMAND } from "../index.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
@@ -166,8 +168,25 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
 
   const envConfig = parseObject(config.env);
-  const hasExplicitApiKey =
-    typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
+  // MAI-2561 — Reject hardcoded PAPERCLIP_API_KEY values in adapter_config.
+  // A stored key in DB is a tenant-isolation hazard: if an admin clones an agent
+  // adapter_config or accidentally swaps it during a hire flow, the wrong company's
+  // key gets injected into a run. The per-run JWT (authToken) is the only path that's
+  // bound to (agentId, companyId, runId) by the server at request time.
+  // Strip + warn loudly. Pending full vault migration (project_paperclip_vault_migration).
+  const configuredApiKeyValue =
+    typeof envConfig.PAPERCLIP_API_KEY === "string"
+      ? envConfig.PAPERCLIP_API_KEY.trim()
+      : "";
+  if (configuredApiKeyValue.length > 0) {
+    void onLog?.(
+      "stderr",
+      `[security] adapter_config carried a hardcoded PAPERCLIP_API_KEY for agent ${agent.id}; ignoring — per-run JWT will be used instead (MAI-2561)\n`,
+    );
+    delete envConfig.PAPERCLIP_API_KEY;
+  }
+  const hasExplicitApiKey = false; // MAI-2561 — never honor stored API keys
+  void hasExplicitApiKey;
   const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
   env.PAPERCLIP_RUN_ID = runId;
 
@@ -263,7 +282,10 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   );
-  const timeoutSec = asNumber(config.timeoutSec, 0);
+  const timeoutSec = resolveAdapterExecutionTargetTimeoutSec(
+    executionTarget,
+    asNumber(config.timeoutSec, 0),
+  );
   const graceSec = asNumber(config.graceSec, 20);
   await ensureAdapterExecutionTargetRuntimeCommandInstalled({
     runId,
@@ -276,7 +298,10 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
     graceSec,
     onLog,
   });
-  await ensureAdapterExecutionTargetCommandResolvable(command, executionTarget, cwd, runtimeEnv, { installCommand: SANDBOX_INSTALL_COMMAND });
+  await ensureAdapterExecutionTargetCommandResolvable(command, executionTarget, cwd, runtimeEnv, {
+    installCommand: SANDBOX_INSTALL_COMMAND,
+    timeoutSec,
+  });
   const resolvedCommand = await resolveAdapterExecutionTargetCommandForLogs(command, executionTarget, cwd, runtimeEnv);
   const loggedEnv = buildInvocationEnvForLogs(env, {
     runtimeEnv,
@@ -349,6 +374,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     legacyRemoteExecution: ctx.executionTransport?.remoteExecution,
   });
   const executionTargetIsRemote = adapterExecutionTargetIsRemote(executionTarget);
+  const executionTargetIsSandbox = executionTarget?.kind === "remote" && executionTarget.transport === "sandbox";
 
   const promptTemplate = asString(
     config.promptTemplate,
@@ -460,6 +486,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           runId,
           target: executionTarget,
           adapterKey: "claude",
+          timeoutSec,
           workspaceLocalDir: cwd,
           installCommand: SANDBOX_INSTALL_COMMAND,
           detectCommand: command,
@@ -553,6 +580,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       target: runtimeExecutionTarget,
       runtimeRootDir: preparedExecutionTargetRuntime?.runtimeRootDir,
       adapterKey: "claude",
+      timeoutSec,
       hostApiToken: env.PAPERCLIP_API_KEY,
       onLog,
     });
@@ -654,7 +682,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   ) => {
     const args = ["--print", "-", "--output-format", "stream-json", "--verbose"];
     if (resumeSessionId) args.push("--resume", resumeSessionId);
-    if (dangerouslySkipPermissions) args.push("--dangerously-skip-permissions");
+    args.push(...buildClaudeExecutionPermissionArgs({
+      dangerouslySkipPermissions,
+      targetIsSandbox: executionTargetIsSandbox,
+    }));
     if (chrome) args.push("--chrome");
     // For Bedrock: only pass --model when the ID is a Bedrock-native identifier
     // (e.g. "us.anthropic.*" or ARN). Anthropic-style IDs like "claude-opus-4-6" are invalid
@@ -697,6 +728,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     const commandNotes: string[] = [];
     if (!resumeSessionId) {
       commandNotes.push(`Using stable Claude prompt bundle ${promptBundle.bundleKey}.`);
+    }
+    if (dangerouslySkipPermissions && executionTargetIsSandbox) {
+      commandNotes.push(
+        "Using a broad --allowedTools whitelist for sandbox execution because Claude rejects --dangerously-skip-permissions under root/sudo.",
+      );
     }
     if (attemptInstructionsFilePath && !resumeSessionId) {
       commandNotes.push(

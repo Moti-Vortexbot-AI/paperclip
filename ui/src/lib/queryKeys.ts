@@ -118,6 +118,12 @@ export const queryKeys = {
     invite: (token: string) => ["access", "invite", token] as const,
     currentBoardAccess: ["access", "current-board-access"] as const,
   },
+  members: {
+    list: (companyId: string) => ["access", "company-members", companyId] as const,
+  },
+  trading: {
+    ironCondorStatus: ["trading", "iron-condor-status"] as const,
+  },
   auth: {
     session: ["auth", "session"] as const,
   },
@@ -135,6 +141,9 @@ export const queryKeys = {
   secrets: {
     list: (companyId: string) => ["secrets", companyId] as const,
     providers: (companyId: string) => ["secret-providers", companyId] as const,
+    providerConfigs: (companyId: string) => ["secret-provider-configs", companyId] as const,
+    usage: (secretId: string) => ["secrets", "usage", secretId] as const,
+    accessEvents: (secretId: string) => ["secrets", "access-events", secretId] as const,
   },
   companySearch: {
     search: (companyId: string, q: string, scope: string, limit: number, offset: number) =>

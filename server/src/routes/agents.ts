@@ -1278,6 +1278,17 @@ export function agentRoutes(
     };
   }
 
+  function redactAgentSecretsForResponse<T extends Awaited<ReturnType<typeof svc.getById>>>(agent: T): T {
+    if (!agent) return agent;
+    const adapterConfig = redactEventPayload(
+      (agent as { adapterConfig?: unknown }).adapterConfig as Record<string, unknown> | null,
+    );
+    const runtimeConfig = redactEventPayload(
+      (agent as { runtimeConfig?: unknown }).runtimeConfig as Record<string, unknown> | null,
+    );
+    return { ...agent, adapterConfig, runtimeConfig } as T;
+  }
+
   function redactAgentConfiguration(agent: Awaited<ReturnType<typeof svc.getById>>) {
     if (!agent) return null;
     return {
@@ -1613,7 +1624,7 @@ export function agentRoutes(
     const result = await svc.list(companyId);
     const canReadConfigs = await actorCanReadConfigurationsForCompany(req, companyId);
     if (canReadConfigs) {
-      res.json(result);
+      res.json(result.map((agent) => redactAgentSecretsForResponse(agent)));
       return;
     }
     res.json(result.map((agent) => redactForRestrictedAgentView(agent)));
@@ -1805,7 +1816,7 @@ export function agentRoutes(
       res.json(await buildAgentDetail(agent, { restricted: true }));
       return;
     }
-    res.json(await buildAgentDetail(agent));
+    res.json(await buildAgentDetail(redactAgentSecretsForResponse(agent)));
   });
 
   router.get("/agents/:id/configuration", async (req, res) => {
@@ -2189,6 +2200,14 @@ export function agentRoutes(
       lastHeartbeatAt: null,
     });
     const agent = await materializeDefaultInstructionsBundleForNewAgent(createdAgent, instructionsBundle);
+    const agentEnv = asRecord(agent.adapterConfig)?.env;
+    if (agentEnv) {
+      await secretsSvc.syncEnvBindingsForTarget?.(
+        companyId,
+        { targetType: "agent", targetId: agent.id },
+        agentEnv,
+      );
+    }
 
     const actor = getActorInfo(req);
     await logActivity(db, {
@@ -2664,6 +2683,14 @@ export function agentRoutes(
     if (!agent) {
       res.status(404).json({ error: "Agent not found" });
       return;
+    }
+    if (touchesAdapterConfiguration) {
+      const agentEnv = asRecord(agent.adapterConfig)?.env;
+      await secretsSvc.syncEnvBindingsForTarget?.(
+        agent.companyId,
+        { targetType: "agent", targetId: agent.id },
+        agentEnv,
+      );
     }
 
     await logActivity(db, {
